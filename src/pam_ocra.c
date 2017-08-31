@@ -44,9 +44,16 @@
 #ifndef _OPENPAM
 static char password_prompt[] = "Password:";
 #endif
+/*
+ * Challenge Prompt
+ * %c: OCRA challenge
+ * %u: UTC time
+ * %l: Local time
+ * Not printing OCRA to avoid information leak
+ */
+#define PROMPT_CHALLENGE "Challenge: %c (%u)"
+#define PROMPT_RESPONSE "Response: "
 
-#define PROMPT_CHALLENGE "OCRA Challenge: %s"
-#define PROMPT_RESPONSE "OCRA Response: "
 #define LOG_NAME "pam_ocra"
 #define MODULE_NAME "pam_ocra"
 
