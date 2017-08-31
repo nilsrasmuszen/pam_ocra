@@ -274,6 +274,7 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	 *
 	 * 	Any other return code will be returned as-is.
 	 */
+	syslog(LOG_AUTH, "OCRA challenge for user %s.", user);
 	qret = challenge(dir, user, &questions, nodata, fake_suite);
 
 	/* Only continue if there is a user prompt to display */

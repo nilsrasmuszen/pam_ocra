@@ -80,7 +80,7 @@ challenge(const char *path, const char *user_name, char **questions,
 
 	errno = 0;
 	if (NULL == (pwd = getpwnam(user_name))) {
-	    syslog(LOG_ERR, "challenge failure getting user_id: %s", strerror(errno));
+	    syslog(LOG_ERR, "Challenge failure getting user_id: %s", strerror(errno));
 	    return PAM_SERVICE_ERR;
 	}
 	user_id = pwd->pw_uid;
@@ -88,7 +88,7 @@ challenge(const char *path, const char *user_name, char **questions,
 
 	if (0 != config_db_open(&db, DB_OPEN_FLAGS_RO, path,
 	    user_id, nodata, fake_suite)) {
-		syslog(LOG_ERR, "ocra.db cannot be opened");
+		syslog(LOG_ERR, "Configuration for user \"%s\" cannot be opened.", user_name);
 		return PAM_SERVICE_ERR;
 	}
 	/* Handle file open errors */
@@ -248,6 +248,7 @@ verify(const char *path, const char *user_name, const char *questions,
 			KEY(K, "C");
 			V.data = &next_counter;
 			V.size = sizeof(uint64_t);
+			syslog(LOG_USER, "Counter updated to %d.", next_counter);
 			if (0 != config_db_put(db, &K, &V)) {
 				syslog(LOG_ERR, "db->put() failed for %s: %s",
 				    (const char *)(K.data),
@@ -257,6 +258,7 @@ verify(const char *path, const char *user_name, const char *questions,
 		}
 		ret = PAM_SUCCESS;
 	} else if (RFC6287_VERIFY_FAILED == r){
+		syslog(LOG_ERR, "Authentication Error for user %s with challenge %s and response %s", user_name, questions, response);
 		ret = PAM_AUTH_ERR;
 	} else {
 		syslog(LOG_ERR, "rfc6287_challenge() failed: %s",
