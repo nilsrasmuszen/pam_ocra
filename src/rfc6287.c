@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <syslog.h>
 #include <time.h>
 #include <errno.h>
 
@@ -407,6 +408,7 @@ verify(const ocra_suite * ocra, const uint8_t *key, size_t key_l,
 	    (md_l != mdlen(ocra->hotp_alg))) {
 		HMAC_CTX_cleanup(&ctx);
 		free(md);
+		syslog(LOG_ERR, "RFC6287_ERR_OPENSSL");
 		return RFC6287_ERR_OPENSSL;
 	}
 	HMAC_CTX_cleanup(&ctx);
@@ -414,6 +416,7 @@ verify(const ocra_suite * ocra, const uint8_t *key, size_t key_l,
 		ret = truncate_md(md, md_l, ocra->hotp_trunc, &tmp);
 		free(md);
 		if (0 != ret) {
+			syslog(LOG_ERR, "truncate_md failed");
 			return ret;
 		}
 	} else {
