@@ -1,5 +1,4 @@
-#ifndef _H_PAM_RFC6287_H_
-#define _H_PAM_RFC6287_H_
+#pragma once
 
 enum alg {
 	none = 0, sha1 = 1, sha256 = 2, sha512 = 3
@@ -75,4 +74,3 @@ int rfc6287_verify(
 	uint32_t counter_window, 	/* 0 if no C param in suite */
 	uint64_t *next_counter,
 	uint32_t timestamp_offset); 	/* 0 if no T param in suite */
-#endif

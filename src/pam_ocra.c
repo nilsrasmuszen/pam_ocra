@@ -34,13 +34,21 @@
 
 #include <security/pam_modules.h>
 #include <security/pam_appl.h>
-#include <security/openpam.h>
 
 #include "ocra.h"
 
 #ifndef PAM_EXTERN
 #define PAM_EXTERN
 #endif
+
+#ifndef _OPENPAM
+static char password_prompt[] = "Password:";
+#endif
+
+#define PROMPT_CHALLENGE "OCRA Challenge: %s"
+#define PROMPT_RESPONSE "OCRA Response: "
+#define LOG_NAME "pam_ocra"
+#define MODULE_NAME "pam_ocra"
 
 static int
 adjust_return(const char *nodata, int ret)
@@ -149,8 +157,8 @@ make_prompt(char *buf, int bsize, const char *questions,
 
 	/* Create the default prompt strings, if necessary */
 	if (NULL == cmsg && NULL == rmsg) {
-		cmsg = "OCRA Challenge: %c";
-		rmsg = "OCRA Response: ";
+		cmsg = PROMPT_CHALLENGE;
+		rmsg = PROMPT_RESPONSE;
 	}
 	/* Generate each prompt */
 	fmt_prompt(cbuf, sizeof(cbuf), questions, cmsg);
@@ -208,21 +216,36 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	const char *user;
 	char *response = NULL;
 	char fmt[512];
-
+#ifndef _OPENPAM
+	struct pam_conv *conv;
+	struct pam_message msg;
+	const struct pam_message *msgp;
+	struct pam_response *resp;
+	int pam_err;
+#endif
 	(void)flags;
 	(void)argc;
 	(void)argv;
 
 	pam_get_item(pamh, PAM_USER, (const void **)&user);
 
-	openlog("pam_ocra", 0, LOG_AUTHPRIV);
+	openlog(LOG_NAME, 0, LOG_AUTHPRIV);
 
 	/* Get options */
+#ifndef _OPENPAM
+	pam_err = pam_get_item(pamh, PAM_CONV, (const void **)&conv);
+	if (pam_err != PAM_SUCCESS)
+		return (PAM_SYSTEM_ERR);
+	msg.msg_style = PAM_PROMPT_ECHO_OFF;
+	msg.msg = password_prompt;
+	msgp = &msg;
+#else
 	fake_suite = openpam_get_option(pamh, "fake_prompt");
 	dir = openpam_get_option(pamh, "dir");
 	nodata = openpam_get_option(pamh, "nodata");
 	cmsg = openpam_get_option(pamh, "cmsg");
 	rmsg = openpam_get_option(pamh, "rmsg");
+#endif
 
 	/*
 	 * Generate the challenge "question".  If the user doesn't have any
@@ -327,4 +350,6 @@ pam_sm_close_session(pam_handle_t *pamh, int flags, int argc, const char *argv[]
 	return PAM_SUCCESS;
 }
 
-PAM_MODULE_ENTRY("pam_ocra");
+#ifdef PAM_MODULE_ENTRY
+PAM_MODULE_ENTRY(MODULE_NAME);
+#endif

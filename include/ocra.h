@@ -1,5 +1,4 @@
-#ifndef _H_PAM_OCRA_H_
-#define _H_PAM_OCRA_H_
+#pragma once
 
 int challenge(
 	const char *path,
@@ -14,4 +13,9 @@ int verify(
 	const char *questions,
 	const char *response);
 
-#endif
+int find_counter(
+	const char *path,
+	const char *questions,
+	const char *response1,
+	const char *response2);
+

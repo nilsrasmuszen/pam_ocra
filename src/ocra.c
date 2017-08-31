@@ -29,76 +29,18 @@
 #include <pwd.h>
 #include <string.h>
 #include <stdarg.h>
-#include <db.h>
+#include <stdint.h>
 #include <fcntl.h>
 #include <syslog.h>
 #include <errno.h>
 
-#include <security/pam_constants.h>
+#include <security/pam_appl.h>
 
 #include <openssl/evp.h>
 
-#include "rfc6287.h"
-#include "ocra.h"
-
-
-#define KEY(k, s) memcpy(k.data = K_buf, s, k.size = sizeof(s));
-
-static char K_buf[32];
-
-static int
-db_get(DB * db, DBT * K, DBT * V)
-{
-	int r;
-
-	if (0 != (r = db->get(db, K, V, 0)))
-		syslog(LOG_ERR, "db->get() failed for %s :%s",
-		    (const char *)(K->data),
-		    (1 == r) ? "key not in db" : (strerror(errno)));
-	return r;
-};
-
-static int
-open_db(DB ** db, int flags, const char *path, const char *user_id,
-    const char *nodata, const char *fake_suite)
-{
-	int r = PAM_SUCCESS;
-	struct passwd *pwd = NULL;
-	char *p1, *p2;
-	char *ep = NULL;
-
-	if (NULL == (pwd = getpwnam(user_id)))
-		return PAM_USER_UNKNOWN;
-
-	asprintf(&p1, "%s/.ocra", pwd->pw_dir);
-	if (NULL == (*db = dbopen(p1, flags, 0, DB_BTREE, NULL))) {
-		if (NULL != path) {
-			asprintf(&p2, "%s/%s", path, user_id);
-			if (NULL == (*db = dbopen(p2, flags, 0, DB_BTREE, NULL))) {
-				ep = p2;
-			}
-		} else {
-			ep = p1;
-		}
-	}
-	/* Handle file open errors */
-	if (NULL != ep) {
-		if (NULL != fake_suite) {
-			/* Indicate that a fake challenge must be generated */
-			r = PAM_NO_MODULE_DATA;
-		} else if (NULL == nodata || strcmp(nodata, "fail") == 0) {
-			/* We know we want to fail, so log an error. */
-			syslog(LOG_ERR, "dbopen(\"%s\", ...) failed: %s", ep,
-			    strerror(errno));
-			r = PAM_AUTHINFO_UNAVAIL;
-		} else {
-			/* We will be changing the return code later */
-			r = PAM_AUTHINFO_UNAVAIL;
-		}
-	}
-	return r;
-}
-
+#include <rfc6287.h>
+#include <db_storage.h>
+#include <ocra.h>
 
 static int
 fake_challenge(const char *suite_string, char **questions)
@@ -121,33 +63,63 @@ fake_challenge(const char *suite_string, char **questions)
 }
 
 int
-challenge(const char *path, const char *user_id, char **questions,
+challenge(const char *path, const char *user_name, char **questions,
     const char *nodata, const char *fake_suite)
 {
 	int r;
 	DB *db = NULL;
 	DBT K, V;
+	int user_id;
+
+	struct passwd *pwd = NULL;
 
 	ocra_suite ocra;
 
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
 
-	if (PAM_SUCCESS !=
-	    (r = open_db(&db, O_EXLOCK | O_RDONLY, path,
-	    user_id, nodata, fake_suite))) {
-		if (PAM_NO_MODULE_DATA == r)
+	errno = 0;
+	if (NULL == (pwd = getpwnam(user_name))) {
+	    syslog(LOG_ERR, "challenge failure getting user_id: %s", strerror(errno));
+	    return PAM_SERVICE_ERR;
+	}
+	user_id = pwd->pw_uid;
+
+
+	if (0 != config_db_open(&db, DB_OPEN_FLAGS_RO, path,
+	    user_id, nodata, fake_suite)) {
+		syslog(LOG_ERR, "ocra.db cannot be opened");
+		return PAM_SERVICE_ERR;
+	}
+	/* Handle file open errors */
+	if (NULL != path) {
+		if (NULL != fake_suite) {
+			/* Indicate that a fake challenge must be generated */
+			r = PAM_NO_MODULE_DATA;
+		} else if (NULL == nodata || strcmp(nodata, "fail") == 0) {
+			/* We know we want to fail, so log an error. */
+			syslog(LOG_ERR, "dbopen(\"%s\", ...) failed: %s", path,
+			    strerror(errno));
+			r = PAM_AUTHINFO_UNAVAIL;
+		} else {
+			/* We will be changing the return code later */
+			r = PAM_AUTHINFO_UNAVAIL;
+		}
+		if (PAM_NO_MODULE_DATA == r ) {
 			r = fake_challenge(fake_suite, questions);
+		}
 		return r;
 	}
+
+
 	KEY(K, "suite");
-	if (0 != db_get(db, &K, &V)) {
-		db->close(db);
+	if (0 != config_db_get(db, &K, &V)) {
+		config_db_close(db);
 		return PAM_SERVICE_ERR;
 	}
 	r = rfc6287_parse_suite(&ocra, V.data);
 
-	db->close(db);
+	config_db_close(db);
 
 	if (RFC6287_SUCCESS != r) {
 		syslog(LOG_ERR, "rfc6287_parse_suite() failed: %s",
@@ -163,7 +135,7 @@ challenge(const char *path, const char *user_id, char **questions,
 }
 
 int
-verify(const char *path, const char *user_id, const char *questions,
+verify(const char *path, const char *user_name, const char *questions,
     const char *response)
 {
 	int ret = PAM_SERVICE_ERR;
@@ -182,20 +154,30 @@ verify(const char *path, const char *user_id, const char *questions,
 	int timestamp_offset = 0;
 	uint64_t next_counter;
 	ocra_suite ocra;
+	int user_id;
+
+	struct passwd *pwd = NULL;
 
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
+
+	errno = 0;
+	if (NULL == (pwd = getpwnam(user_name))) {
+	    syslog(LOG_ERR, "verify failure getting user_id: %s", strerror(errno));
+	    return PAM_SERVICE_ERR;
+	}
+	user_id = pwd->pw_uid;
 
 	/*
 	 * This function should only be called if there was valid OCRA data for
 	 * the user.  Fail out if it doesn't exist.
 	 */
-	r = open_db(&db, O_EXLOCK | O_RDWR, path, user_id, NULL, NULL);
+	r = config_db_open(&db, DB_OPEN_FLAGS_RW, path, user_id, NULL, NULL);
 	if (PAM_SUCCESS != r)
 		return r;
 
 	KEY(K, "suite");
-	if (0 != db_get(db, &K, &V))
+	if (0 != config_db_get(db, &K, &V))
 		goto out;
 	if (NULL == (suite_string = (char *)malloc(V.size))) {
 		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
@@ -209,7 +191,7 @@ verify(const char *path, const char *user_id, const char *questions,
 		goto out;
 	}
 	KEY(K, "key");
-	if (0 != db_get(db, &K, &V))
+	if (0 != config_db_get(db, &K, &V))
 		goto out;
 	if (NULL == (key = (uint8_t *)malloc(V.size))) {
 		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
@@ -220,18 +202,18 @@ verify(const char *path, const char *user_id, const char *questions,
 
 	if (ocra.flags & FL_C) {
 		KEY(K, "C");
-		if (0 != db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V))
 			goto out;
 		memcpy(&C, V.data, sizeof(C));
 
 		KEY(K, "counter_window");
-		if (0 != db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V))
 			goto out;
 		memcpy(&counter_window, V.data, sizeof(counter_window));
 	}
 	if (ocra.flags & FL_P) {
 		KEY(K, "P");
-		if (0 != db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V))
 			goto out;
 		if (NULL == (P = (uint8_t *)malloc(V.size))) {
 			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
@@ -242,7 +224,7 @@ verify(const char *path, const char *user_id, const char *questions,
 	}
 	if (ocra.flags & FL_T) {
 		KEY(K, "timestamp_offset");
-		if (0 != db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V))
 			goto out;
 		memcpy(&timestamp_offset, V.data, sizeof(timestamp_offset));
 
@@ -260,7 +242,7 @@ verify(const char *path, const char *user_id, const char *questions,
 			KEY(K, "C");
 			V.data = &next_counter;
 			V.size = sizeof(uint64_t);
-			if (0 != db->put(db, &K, &V, 0)) {
+			if (0 != config_db_put(db, &K, &V)) {
 				syslog(LOG_ERR, "db->put() failed for %s: %s",
 				    (const char *)(K.data),
 				    strerror(errno));
@@ -274,7 +256,145 @@ verify(const char *path, const char *user_id, const char *questions,
 		syslog(LOG_ERR, "rfc6287_challenge() failed: %s",
 		    rfc6287_err(r));
 out:
-	if (0 != db->close(db))
+	if (0 != config_db_close(db))
+		syslog(LOG_ERR, "db->close() failed: %s", strerror(errno));
+	free(suite_string);
+	free(key);
+	free(P);
+	return ret;
+}
+
+
+int
+find_counter(const char *path,
+    const char *questions, const char *response1, const char *response2)
+{
+	int ret = PAM_SERVICE_ERR;
+	int r, rv;
+	DB *db = NULL;
+	DBT K, V;
+
+	char *suite_string = NULL;
+	uint8_t *key = NULL;
+	size_t key_l = 0;
+	uint64_t C = 0;
+	uint64_t CS = 0;
+	uint64_t notify_mod = UINT64_MAX / 100000;
+	uint8_t *P = NULL;
+	size_t P_l = 0;
+	uint64_t T = 0;
+	int counter_window = 0;
+	int timestamp_offset = 0;
+	uint64_t next_counter;
+	ocra_suite ocra;
+	int user_id = 0;
+
+	memset(&K, 0, sizeof(K));
+	memset(&V, 0, sizeof(V));
+
+	/*
+	 * This function will only be called with a valid db file.
+	 *  Fail out if it doesn't exist.
+	 */
+	r = config_db_open(&db, DB_OPEN_FLAGS_RW, path, 0, NULL, NULL);
+	if (PAM_SUCCESS != r)
+		return r;
+
+	KEY(K, "suite");
+	if (0 != config_db_get(db, &K, &V))
+		goto out;
+	if (NULL == (suite_string = (char *)malloc(V.size))) {
+		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+		goto out;
+	}
+	memcpy(suite_string, V.data, V.size);
+
+	if (RFC6287_SUCCESS != (r = rfc6287_parse_suite(&ocra, suite_string))) {
+		syslog(LOG_ERR, "rfc6287_parse_suite() failed: %s",
+		    rfc6287_err(r));
+		goto out;
+	}
+	KEY(K, "key");
+	if (0 != config_db_get(db, &K, &V))
+		goto out;
+	if (NULL == (key = (uint8_t *)malloc(V.size))) {
+		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+		goto out;
+	}
+	memcpy(key, V.data, V.size);
+	key_l = V.size;
+
+	if (ocra.flags & FL_C) {
+		KEY(K, "C");
+		if (0 != config_db_get(db, &K, &V))
+			goto out;
+		memcpy(&C, V.data, sizeof(C));
+
+		KEY(K, "counter_window");
+		if (0 != config_db_get(db, &K, &V))
+			goto out;
+		memcpy(&counter_window, V.data, sizeof(counter_window));
+	}
+	if (ocra.flags & FL_P) {
+		KEY(K, "P");
+		if (0 != config_db_get(db, &K, &V))
+			goto out;
+		if (NULL == (P = (uint8_t *)malloc(V.size))) {
+			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+			goto out;
+		}
+		memcpy(P, V.data, V.size);
+		P_l = V.size;
+	}
+	if (ocra.flags & FL_T) {
+		KEY(K, "timestamp_offset");
+		if (0 != config_db_get(db, &K, &V))
+			goto out;
+		memcpy(&timestamp_offset, V.data, sizeof(timestamp_offset));
+
+		if (0 != rfc6287_timestamp(&ocra, &T)) {
+			syslog(LOG_ERR, "rfc6287_timestamp() failed: %s",
+			    rfc6287_err(r));
+			goto out;
+		}
+	}
+	C = 0;
+	counter_window = 1;
+	while (C < UINT64_MAX) {
+		r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
+		    P, P_l, NULL, 0, T, response1, counter_window, &next_counter,
+		    timestamp_offset);
+		C = next_counter;
+		if (r != RFC6287_SUCCESS) {
+			continue;
+		}
+		printf("@0x%.16" PRIx64 ".", C);
+		rv = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
+		    P, P_l, NULL, 0, T, response2, counter_window, &next_counter,
+		    timestamp_offset);
+		C = next_counter;
+		if (rv != RFC6287_SUCCESS) {
+			printf(" 2nd verify does not match.\n");
+			continue;
+		}
+		printf(" 2nd verify match.\n");
+		printf("Found Counter. The next counter is: 0x%.16" PRIx64 ".\n", C);
+		printf("Storing counter in db to allow future window checks\n");
+		if (ocra.flags & FL_C) {
+			KEY(K, "C");
+			V.data = &C;
+			V.size = sizeof(uint64_t);
+			if (0 != config_db_put(db, &K, &V)) {
+				syslog(LOG_ERR, "db->put() failed for %s: %s",
+				    (const char *)(K.data),
+				    strerror(errno));
+				goto out;
+			}
+		}
+		break;
+	}
+out:
+	if (0 != config_db_close(db))
 		syslog(LOG_ERR, "db->close() failed: %s", strerror(errno));
 	free(suite_string);
 	free(key);

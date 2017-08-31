@@ -36,19 +36,17 @@
 #include <errno.h>
 #include <sysexits.h>
 
-#include <db.h>
 #include <fcntl.h>
 
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
-#include "rfc6287.h"
-
-#define KEY(k, s) memcpy(k.data = K_buf, s, k.size = sizeof(s));
-#define VALUE(v, s, z) memcpy(v.data = V_buf, s, v.size = z);
-
-static char K_buf[32];
-static char V_buf[254];
+#include <rfc6287.h>
+#include <db_storage.h>
+#include <ocra.h>
+#ifndef bsd
+#define ishexnumber isxdigit
+#endif
 
 static void
 pin_hash(const ocra_suite * ocra, const char *pin, uint8_t **P, size_t *P_l)
@@ -106,18 +104,27 @@ from_hex(const char *in, uint8_t **out, size_t len)
 {
 	uint32_t i;
 
+	//XXX len-check, assert
 	if (0 == strncmp("0x", in, 2))
 		in += 2;
-	if (strlen(in) != (len * 2))
+	if (strlen(in) % 2 == 1) {
+		printf("number of chars in key not correct\n");
 		return -1;
+	}
 	if (NULL == (*out = (uint8_t *)malloc(len)))
 		return -1;
-	for (i = 0; len > i; i++)
-		if (1 != sscanf(&in[i * 2], "%2hhx", *out + i) ||
-		    (!ishexnumber(in[(i * 2) + 1]))) {
+	for (i = 0; i < len; i++) {
+		if (1 != sscanf(&in[i * 2], "%2hhx", *out + i)) {
+			fprintf(stderr, "scanf %%2hhx failed.\n");
 			free(*out);
 			return -1;
 		}
+		if (!ishexnumber(toupper(in[(i * 2) + 1]))) {
+			fprintf(stderr, "ishexnumber \"%c\"@%d failed.\n", in[(i * 2) + 1], i);
+			free(*out);
+			return -1;
+		}
+	}
 	return 0;
 }
 
@@ -128,7 +135,8 @@ usage(void)
 	    "usage: ocra_tool init -f credential_file -k key -s suite_string\n"
 	    "                     [-c counter] [-p pin | -P pin_hash]\n"
 	    "                     [-w counter_window] [-t timestamp_offset]\n"
-	    "       ocra_tool info -f credential_file\n");
+	    "       ocra_tool info -f credential_file\n"
+	    "       ocra_tool sync_counter -f credential_file -c challenge -r response -v second_response\n");
 	exit(-1);
 }
 
@@ -140,8 +148,13 @@ cmd_info(int argc, char **argv)
 	char *fname = NULL;
 	ocra_suite ocra;
 
+	const char *nodata = NULL;
+	const char *fake_suite = NULL;
+
 	DB *db;
 	DBT K, V;
+
+	int user_id = geteuid();
 
 	while (-1 != (ch = getopt(argc, argv, "f:"))) {
 		switch (ch) {
@@ -162,58 +175,62 @@ cmd_info(int argc, char **argv)
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
 
-	if (NULL ==
-	    (db = dbopen(fname, O_EXLOCK | O_RDONLY, 0600, DB_BTREE, NULL)))
+	if (0 != (config_db_open(&db, DB_OPEN_FLAGS_RO, fname,
+	    user_id, nodata, fake_suite))) {
 		err(EX_OSERR, "dbopen() failed");
-
+	}
 	KEY(K, "suite");
-	if (0 != (ret = db->get(db, &K, &V, 0)))
+	if (0 != (ret = config_db_get(db, &K, &V))) {
 		errx(EX_OSERR, "db->get() failed: %s",
 		    (1 == ret) ? "key not in db" : strerror(errno));
+	}
 	printf("suite:\t\t%s\n", (char *)(V.data));
 
-	if (RFC6287_SUCCESS != (ret = rfc6287_parse_suite(&ocra, V.data)))
+	if (RFC6287_SUCCESS != (ret = rfc6287_parse_suite(&ocra, V.data))) {
 		errx(EX_SOFTWARE, "rfc6287_parse_suite() failed: %s",
 		    rfc6287_err(ret));
+	}
 
 	KEY(K, "key");
-	if (0 != (ret = db->get(db, &K, &V, 0)))
+	if (0 != (ret = config_db_get(db, &K, &V))) {
 		errx(EX_OSERR, "db->get() failed: %s",
 		    (1 == ret) ? "key not in db" : strerror(errno));
-	if (mdlen(ocra.hotp_alg) != V.size)
+	}
+	if (mdlen(ocra.hotp_alg) != V.size) {
 		errx(EX_SOFTWARE, "key size does not match suite!");
+	}
 
-	printf("key:\t\t0x");
-	for (i = 0; V.size > i; i++)
-		printf("%02x", ((uint8_t *)(V.data))[i]);
-	printf("\n");
 
 	if (ocra.flags & FL_C) {
 		uint64_t C;
 		int CW;
 
 		KEY(K, "C");
-		if (0 != (ret = db->get(db, &K, &V, 0)))
+		if (0 != (ret = config_db_get(db, &K, &V))) {
 			errx(EX_OSERR, "db->get() failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
+		}
 		memcpy(&C, V.data, sizeof(C));
 		printf("counter:\t0x%.16" PRIx64 "\n", C);
 
 		KEY(K, "counter_window");
-		if (0 != (ret = db->get(db, &K, &V, 0)))
+		if (0 != (ret = config_db_get(db, &K, &V))) {
 			errx(EX_OSERR, "db->get() failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
+		}
 		memcpy(&CW, V.data, sizeof(CW));
 		printf("counter_window: %d\n", CW);
 	}
 	if (ocra.flags & FL_P) {
 		KEY(K, "P");
-		if (0 != (ret = db->get(db, &K, &V, 0)))
+		if (0 != (ret = config_db_get(db, &K, &V))) {
 			errx(EX_OSERR, "db->get() failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
+		}
 
-		if (mdlen(ocra.P_alg) != V.size)
+		if (mdlen(ocra.P_alg) != V.size) {
 			errx(EX_SOFTWARE, "pin hash size does not match suite!");
+		}
 		printf("pin_hash:\t0x");
 		for (i = 0; V.size > i; i++)
 			printf("%02x", ((uint8_t *)(V.data))[i]);
@@ -223,14 +240,16 @@ cmd_info(int argc, char **argv)
 		int TO;
 
 		KEY(K, "timestamp_offset");
-		if (0 != (ret = db->get(db, &K, &V, 0)))
+		if (0 != (ret = config_db_get(db, &K, &V))) {
 			errx(EX_OSERR, "db->get() failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
+		}
 		memcpy(&TO, V.data, sizeof(TO));
 		printf("timestamp_offset: %d\n", TO);
 	}
-	if (0 != (db->close(db)))
+	if (0 != (config_db_close(db))) {
 		errx(EX_OSERR, "db->close() failed: %s", strerror(errno));
+	}
 }
 
 static void
@@ -274,48 +293,61 @@ write_db(const char *fname, const char *suite_string,
 	DB *db;
 	DBT K, V;
 
+	int user_id = geteuid();
+	const char *nodata = NULL;
+	const char *fake_suite = NULL;
+
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
 
-	if (NULL == (db = dbopen(fname, O_CREAT | O_EXLOCK | O_RDWR | O_TRUNC,
-	    0600, DB_BTREE, NULL)))
+	if (0 != (config_db_open(&db, DB_OPEN_FLAGS_CREATE, fname,
+	    user_id, nodata, fake_suite))) {
 		err(EX_OSERR, "dbopen() failed");
+	}
 
 	KEY(K, "suite");
 	VALUE(V, suite_string, strlen(suite_string) + 1);
-	if (0 != (db->put(db, &K, &V, R_NOOVERWRITE)))
-		err(EX_OSERR, "db->put() failed");
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() suite failed");
+	}
 
 	KEY(K, "key");
 	VALUE(V, key, key_l);
-	if (0 != (db->put(db, &K, &V, R_NOOVERWRITE)))
-		err(EX_OSERR, "db->put() failed");
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() key failed");
+	}
 
 	KEY(K, "C");
 	VALUE(V, &C, sizeof(C));
-	if (0 != (db->put(db, &K, &V, R_NOOVERWRITE)))
-		err(EX_OSERR, "db->put() failed");
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() count failed");
+	}
 
 	KEY(K, "P");
 	VALUE(V, P, P_l);
-	if (0 != (db->put(db, &K, &V, R_NOOVERWRITE)))
-		err(EX_OSERR, "db->put() failed");
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() P failed");
+	}
 
 	KEY(K, "counter_window");
 	VALUE(V, &counter_window, sizeof(counter_window));
-	if (0 != (db->put(db, &K, &V, R_NOOVERWRITE)))
-		err(EX_OSERR, "db->put() failed");
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() counter_window failed");
+	}
 
 	KEY(K, "timestamp_offset");
 	VALUE(V, &timestamp_offset, sizeof(timestamp_offset));
-	if (0 != (db->put(db, &K, &V, R_NOOVERWRITE)))
-		err(EX_OSERR, "db->put() failed");
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() timestamp_offset failed");
+	}
 
-	if (0 != (db->sync(db, 0)))
+	if (0 != (config_db_sync(db))) {
 		err(EX_OSERR, "db->sync() failed");
+	}
 
-	if (0 != (db->close(db)))
+	if (0 != (config_db_close(db))) {
 		err(EX_OSERR, "db->close() failed");
+	}
 }
 
 static void
@@ -345,43 +377,51 @@ cmd_init(int argc, char **argv)
 	while (-1 != (ch = getopt(argc, argv, "f:s:k:p:P:c:w:t:"))) {
 		switch (ch) {
 		case 'f':
-			if (NULL != fname)
+			if (NULL != fname) {
 				usage();
+			}
 			fname = optarg;
 			break;
 		case 's':
-			if (NULL != suite_string)
+			if (NULL != suite_string) {
 				usage();
+			}
 			suite_string = optarg;
 			break;
 		case 'k':
-			if (NULL != key_string)
+			if (NULL != key_string) {
 				usage();
+			}
 			key_string = optarg;
 			break;
 		case 'c':
-			if (NULL != counter_string)
+			if (NULL != counter_string) {
 				usage();
+			}
 			counter_string = optarg;
 			break;
 		case 'p':
-			if (NULL != pin_string)
+			if (NULL != pin_string) {
 				usage();
+			}
 			pin_string = optarg;
 			break;
 		case 'P':
-			if (NULL != pin_hash_string)
+			if (NULL != pin_hash_string) {
 				usage();
+			}
 			pin_hash_string = optarg;
 			break;
 		case 'w':
-			if (NULL != counter_window_string)
+			if (NULL != counter_window_string) {
 				usage();
+			}
 			counter_window_string = optarg;
 			break;
 		case 't':
-			if (NULL != timestamp_offset_string)
+			if (NULL != timestamp_offset_string) {
 				usage();
+			}
 			timestamp_offset_string = optarg;
 			break;
 		default:
@@ -392,47 +432,57 @@ cmd_init(int argc, char **argv)
 	if ((0 != argc) ||
 	    (NULL == fname) ||
 	    (NULL == suite_string) ||
-	    (NULL == key_string))
+	    (NULL == key_string)) {
 		usage();
+	}
 
-	if (RFC6287_SUCCESS != (r = rfc6287_parse_suite(&ocra, suite_string)))
+	if (RFC6287_SUCCESS != (r = rfc6287_parse_suite(&ocra, suite_string))) {
 		err(EX_CONFIG, "rfc6287_parse_suite() failed: %s",
 		    rfc6287_err(r));
+	}
 
 	if (ocra.flags & FL_C) {
 		if (NULL == counter_string)
 			errx(EX_CONFIG, "suite requires counter parameter "
 			    "(-c <counter> missing)");
-		if (-1 == parse_counter(counter_string, &C))
+		if (-1 == parse_counter(counter_string, &C)) {
 			errx(EX_CONFIG, "invalid counter value");
-		if (NULL != counter_window_string)
+		}
+		if (NULL != counter_window_string) {
 			if (-1 ==
-			    (counter_window = parse_num(counter_window_string)))
+			    (counter_window = parse_num(counter_window_string))) {
 				errx(EX_CONFIG, "invalud counter window value");
+			}
+		}
 	} else {
-		if (NULL != counter_string)
+		if (NULL != counter_string) {
 			errx(EX_CONFIG, "suite does not require counter "
 			    "parameter (-c <counter> must not be set)");
-		if (NULL != counter_window_string)
+		}
+		if (NULL != counter_window_string) {
 			errx(EX_CONFIG, "suite does not require counter "
 			    "parameter  (-w <counter_window> must not be set)");
+		}
 	}
 
-	if (ocra.flags & FL_S)
+	if (ocra.flags & FL_S) {
 		errx(EX_CONFIG, "suite requires session parameter (S) which"
 		    " is not supported by pam_ocra");
+	}
 
 	if (ocra.flags & FL_T) {
 		if (-1 ==
-		    (timestamp_offset = parse_num(timestamp_offset_string)))
+		    (timestamp_offset = parse_num(timestamp_offset_string))) {
 			errx(EX_CONFIG, "invalid timestamp offset value");
-	} else if (NULL != timestamp_offset_string)
+		}
+	} else if (NULL != timestamp_offset_string) {
 		errx(EX_CONFIG, "suite does nor require timestamp parameter "
 		    " (-t <timestamp_offset> must not be set)");
-
-	if (0 == ocra.hotp_trunc)
+	}
+	if (0 == ocra.hotp_trunc) {
 		errx(EX_CONFIG, "suite specifies no (0) truncation in "
 		    "CryptoFunction. This is not supported by pam_ocra");
+	}
 
 	if (ocra.flags & FL_P) {
 		if (NULL != pin_string && NULL != pin_hash_string)
@@ -458,9 +508,85 @@ cmd_init(int argc, char **argv)
 	test_input(&ocra, suite_string, key, key_l, C, P, P_l,
 	    counter_window, timestamp_offset);
 
+	unlink(fname);
 	write_db(fname, suite_string, key, key_l, C, P, P_l,
 	    counter_window, timestamp_offset);
 
+}
+
+static void
+cmd_sync_counter(int argc, char **argv)
+{
+	int ch, ret;
+	uint32_t i;
+	char *fname = NULL;
+	char *challenge = NULL;
+	char *response1 = NULL;
+	char *response2 = NULL;
+	ocra_suite ocra;
+
+	const char *nodata = NULL;
+	const char *fake_suite = NULL;
+
+	DB *db;
+	DBT K, V;
+
+	uint64_t C;
+	int CW;
+
+	int user_id = geteuid();
+
+	while (-1 != (ch = getopt(argc, argv, "f:c:r:v:"))) {
+		switch (ch) {
+		case 'f':
+			if (NULL != fname) {
+				usage();
+			}
+			fname = optarg;
+			break;
+		case 'c':
+			if (NULL != challenge) {
+				usage();
+			}
+			challenge = optarg;
+			break;
+		case 'r':
+			if (NULL != response1) {
+				usage();
+			}
+			response1 = optarg;
+			break;
+		case 'v':
+			if (NULL != response2) {
+				usage();
+			}
+			response2 = optarg;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	if ((0 != argc) ||
+	    (NULL == fname))
+		usage();
+
+	memset(&K, 0, sizeof(K));
+	memset(&V, 0, sizeof(V));
+
+	if (strlen(challenge) != 8) {
+		err(EX_SOFTWARE, "Challenge with 8 bytes required");
+	}
+	if (strlen(response1) != 6) {
+		err(EX_SOFTWARE, "Response with 6 bytes required");
+	}
+	if (strlen(response2) != 6) {
+		err(EX_SOFTWARE, "Validation with 6 bytes required");
+	}
+
+	printf("Brute forcing verify function...\n");
+	find_counter(fname, challenge, response1, response2);
+	printf("done\n");
 }
 
 int
@@ -472,6 +598,8 @@ main(int argc, char **argv)
 		cmd_init(argc - 1, argv + 1);
 	else if (0 == strcmp(argv[1], "info"))
 		cmd_info(argc - 1, argv + 1);
+	else if (0 == strcmp(argv[1], "sync_counter"))
+		cmd_sync_counter(argc - 1, argv + 1);
 	else
 		usage();
 	return 0;

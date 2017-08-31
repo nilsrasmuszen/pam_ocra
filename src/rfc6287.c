@@ -26,7 +26,11 @@
  */
 
 #include <sys/types.h>
+#ifdef bsd
 #include <sys/endian.h>
+#else
+#include <endian.h>
+#endif
 #include <sys/time.h>
 #include <inttypes.h>
 #include <stdlib.h>
