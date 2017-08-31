@@ -80,12 +80,13 @@ evp_md(enum alg A)
 static enum alg
 parse_alg(const char *in)
 {
-	if (0 == strcmp(in, "SHA1"))
+	if (0 == strcmp(in, "SHA1")) {
 		return sha1;
-	else if (0 == strcmp(in, "SHA256"))
+	} else if (0 == strcmp(in, "SHA256")) {
 		return sha256;
-	else if (0 == strcmp(in, "SHA512"))
+	} else if (0 == strcmp(in, "SHA512")) {
 		return sha512;
+	}
 	return none;
 }
 
@@ -95,8 +96,9 @@ parse_num(const char *in)
 	char *stopped;
 	int x = (int)strtol(in, &stopped, 10);
 
-	if (*stopped || (x < 0))
+	if (*stopped || (x < 0)) {
 		return -1;
+	}
 	return x;
 }
 
@@ -106,8 +108,9 @@ parse_cryptofunction(ocra_suite * ocra, const char *in)
 	int ret, l;
 	char *token, *string, *tofree;
 
-	if (NULL == (tofree = string = strdup(in)))
+	if (NULL == (tofree = string = strdup(in))) {
 		return RFC6287_ERR_POSIX;
+	}
 
 	if ((NULL == (token = strsep(&string, "-"))) ||
 	    (0 != strcmp(token, "HOTP")) ||
@@ -118,10 +121,11 @@ parse_cryptofunction(ocra_suite * ocra, const char *in)
 	    (-1 == (ocra->hotp_trunc = parse_num(token))) ||
 	    ((0 != ocra->hotp_trunc) &&
 	    ((4 > ocra->hotp_trunc) || (11 < ocra->hotp_trunc))) ||
-	    ((10 > ocra->hotp_trunc) && (2 == l)))
+	    ((10 > ocra->hotp_trunc) && (2 == l))) {
 		ret = RFC6287_INVALID_SUITE;
-	else
+	} else {
 		ret = 0;
+	}
 	free(tofree);
 	return ret;
 }
@@ -132,41 +136,50 @@ parse_datainput(ocra_suite * ocra, const char *in)
 	int ret = RFC6287_INVALID_SUITE;
 	char *token, *string, *tofree;
 
-	if (NULL == (tofree = string = strdup(in)))
+	if (NULL == (tofree = string = strdup(in))) {
 		return RFC6287_ERR_POSIX;
+	}
 
-	if ((NULL == (token = strsep(&string, "-"))))
+	if ((NULL == (token = strsep(&string, "-")))) {
 		goto err;
+	}
 
 	/* C: optional */
 	if (0 == strcmp(token, "C")) {
 		ocra->flags |= FL_C;
-		if (NULL == (token = strsep(&string, "-")))
+		if (NULL == (token = strsep(&string, "-"))) {
 			goto err;
+		}
 	}
 	/* QFxx: mandatory */
-	if (4 != strlen(token))
+	if (4 != strlen(token)) {
 		goto err;
-	if (0 == strncmp(token, "QA", 2))
+	}
+	if (0 == strncmp(token, "QA", 2)) {
 		ocra->Q_fmt = a;
-	else if (0 == strncmp(token, "QN", 2))
+	} else if (0 == strncmp(token, "QN", 2)) {
 		ocra->Q_fmt = n;
-	else if (0 == strncmp(token, "QH", 2))
+	} else if (0 == strncmp(token, "QH", 2)) {
 		ocra->Q_fmt = h;
-	else
+	} else {
 		goto err;
+	}
 	if ((-1 == (ocra->Q_l = parse_num(token + 2))) ||
-	    ((4 > ocra->Q_l) || 65 < (ocra->Q_l)))
+	    ((4 > ocra->Q_l) || 65 < (ocra->Q_l))) {
 		goto err;
-	if (NULL == (token = strsep(&string, "-")))
+	}
+	if (NULL == (token = strsep(&string, "-"))) {
 		goto done;
+	}
 	/* PH: optional */
 	if ('P' == token[0]) {
 		ocra->flags |= FL_P;
-		if (none == (ocra->P_alg = parse_alg(token + 1)))
+		if (none == (ocra->P_alg = parse_alg(token + 1))) {
 			goto err;
-		if (NULL == (token = strsep(&string, "-")))
+		}
+		if (NULL == (token = strsep(&string, "-"))) {
 			goto done;
+		}
 	}
 	/* Snnn: optional */
 	if ('S' == token[0]) {
@@ -175,11 +188,13 @@ parse_datainput(ocra_suite * ocra, const char *in)
 		ocra->flags |= FL_S;
 		if ((4 != strlen(token)) ||
 		    (-1 == (tmp = parse_num(token + 1))) ||
-		    ((-1 > tmp) || (1000 < tmp)))
+		    ((-1 > tmp) || (1000 < tmp))) {
 			goto err;
+		}
 		ocra->S_l = tmp;
-		if (NULL == (token = strsep(&string, "-")))
+		if (NULL == (token = strsep(&string, "-"))) {
 			goto done;
+		}
 	}
 	/* TG: optional */
 	if ('T' == token[0]) {
@@ -188,34 +203,40 @@ parse_datainput(ocra_suite * ocra, const char *in)
 		char c;
 
 		ocra->flags |= FL_T;
-		if (3 > l || 4 < l)
+		if (3 > l || 4 < l) {
 			goto err;
+		}
 		c = token[l - 1];
 		token[l - 1] = 0;
-		if (-1 == (y = parse_num(token + 1)))
+		if (-1 == (y = parse_num(token + 1))) {
 			goto err;
+		}
 		switch (c) {
 		case 'S':
-			if (((0 > y) || (60 < y)) || ((10 > y) && (3 != l)))
+			if (((0 > y) || (60 < y)) || ((10 > y) && (3 != l))) {
 				goto err;
+			}
 			ocra->T_step = y;
 			break;
 		case 'M':
-			if (((0 > y) || (60 < y)) || ((10 > y) && (3 != l)))
+			if (((0 > y) || (60 < y)) || ((10 > y) && (3 != l))) {
 				goto err;
+			}
 			ocra->T_step = y * 60;
 			break;
 		case 'H':
-			if (((0 > y) || (48 < y)) || ((10 < y) && (3 != l)))
+			if (((0 > y) || (48 < y)) || ((10 < y) && (3 != l))) {
 				goto err;
+			}
 			ocra->T_step = y * 3600;
 			break;
 		default:
 			goto err;
 			break;
 		}
-		if (NULL == (token = strsep(&string, "-")))
+		if (NULL == (token = strsep(&string, "-"))) {
 			goto done;
+		}
 	}
 	goto err;
 done:
@@ -232,12 +253,14 @@ hex2bin(uint8_t *out, const char *in)
 	char *tmp = NULL;
 	BIGNUM *B;
 
-	if (NULL == (B = BN_new()))
+	if (NULL == (B = BN_new())) {
 		return RFC6287_ERR_OPENSSL;
+	}
 
 	if ((g = strlen(in)) % 2) {	/* pad hex string to even length */
-		if (NULL == (tmp = (char *)malloc(g + 2)))
+		if (NULL == (tmp = (char *)malloc(g + 2))) {
 			return RFC6287_ERR_POSIX;
+		}
 		memcpy(tmp, in, g);
 		tmp[g] = '0';
 		tmp[g + 1] = 0;
@@ -257,8 +280,9 @@ hex2bin(uint8_t *out, const char *in)
 	ret = l;
 err:
 	free(tmp);
-	if (NULL != B)
+	if (NULL != B) {
 		BN_free(B);
+	}
 	return ret;
 }
 
@@ -279,15 +303,18 @@ dec2bin(uint8_t *out, const char *in)
 		ret = RFC6287_INVALID_CHALLENGE;
 		goto err;
 	}
-	if (1 < l && '0' == tmp[0])
+	if (1 < l && '0' == tmp[0]) {
 		ret = hex2bin(out, tmp + 1);
-	else
+	} else {
 		ret = hex2bin(out, tmp);
+	}
 err:
-	if (NULL != tmp)
+	if (NULL != tmp) {
 		OPENSSL_free(tmp);
-	if (NULL != B)
+	}
+	if (NULL != B) {
 		BN_free(B);
+	}
 	return ret;
 }
 
@@ -298,18 +325,21 @@ format_questions(const ocra_suite * ocra, uint8_t *out, const char *Q)
 
 	switch (ocra->Q_fmt) {
 	case a:
-		if (128 < (l = strlen(Q)))
+		if (128 < (l = strlen(Q))) {
 			return RFC6287_INVALID_CHALLENGE;
-		else
+		} else {
 			memcpy(out, Q, l);
+		}
 		break;
 	case h:
-		if (0 > (l = hex2bin(out, Q)))
+		if (0 > (l = hex2bin(out, Q))) {
 			return l;
+		}
 		break;
 	case n:
-		if (0 > (l = dec2bin(out, Q)))
+		if (0 > (l = dec2bin(out, Q))) {
 			return l;
+		}
 		break;
 	}
 	memset(out + l, 0, 128 - l);
@@ -325,8 +355,9 @@ truncate_md(const uint8_t *md, size_t md_l, int len, char **resp)
 	10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000};
 
 	v = (v & 0x7fffffff) % p[len - 4];
-	if (NULL == (*resp = (char *)malloc(len + 1)))
+	if (NULL == (*resp = (char *)malloc(len + 1))) {
 		return RFC6287_ERR_POSIX;
+	}
 
 	snprintf(*resp, len + 1, "%.*" PRIu64, len, v);
 	return 0;
@@ -341,10 +372,10 @@ check_di_params(const ocra_suite * ocra, size_t key_l, const char *Q,
 	    (64 < strlen(Q)) ||
 	    ((ocra->flags & FL_P) && (P_l != mdlen(ocra->P_alg))) ||
 	    ((ocra->flags & FL_S) && (S_l != ocra->S_l)) ||
-	    ((ocra->flags & FL_T) && (0 == T)))
+	    ((ocra->flags & FL_T) && (0 == T))) {
 		return RFC6287_INVALID_PARAMS;
-	else
-		return 0;
+	}
+	return 0;
 }
 
 static inline void
@@ -365,8 +396,9 @@ verify(const ocra_suite * ocra, const uint8_t *key, size_t key_l,
 	char *tmp;
 	HMAC_CTX ctx;
 
-	if (NULL == ((md = (uint8_t *)malloc(mdlen(ocra->hotp_alg)))))
+	if (NULL == ((md = (uint8_t *)malloc(mdlen(ocra->hotp_alg))))) {
 		return RFC6287_ERR_POSIX;
+	}
 
 	HMAC_CTX_init(&ctx);
 	if ((1 != HMAC_Init(&ctx, key, key_l, evp_md(ocra->hotp_alg))) ||
@@ -381,15 +413,18 @@ verify(const ocra_suite * ocra, const uint8_t *key, size_t key_l,
 	if (ocra->hotp_trunc) {
 		ret = truncate_md(md, md_l, ocra->hotp_trunc, &tmp);
 		free(md);
-		if (0 != ret)
+		if (0 != ret) {
 			return ret;
-	} else
+		}
+	} else {
 		tmp = (char *)md;
+	}
 	if (0 != memcmp(resp, tmp,
-		(ocra->hotp_trunc) ? (unsigned int)ocra->hotp_trunc : md_l))
+		(ocra->hotp_trunc) ? (unsigned int)ocra->hotp_trunc : md_l)) {
 		ret = RFC6287_VERIFY_FAILED;
-	else
+	} else {
 		ret = RFC6287_SUCCESS;
+	}
 	free(tmp);
 	return ret;
 }
@@ -406,8 +441,9 @@ verify_c(const ocra_suite * ocra, off_t C_off, const uint8_t *key, size_t key_l,
 		st64be(buf + C_off, *next_C);
 		(*next_C)++;
 		if (RFC6287_VERIFY_FAILED !=
-		    (ret = verify(ocra, key, key_l, buf, buf_l, resp)))
+		    (ret = verify(ocra, key, key_l, buf, buf_l, resp))) {
 			break;
+		}
 	} while (*next_C <= (C + counter_window));
 	return ret;
 }
@@ -420,8 +456,9 @@ rfc6287_parse_suite(ocra_suite * ocra, const char *suite)
 
 	memset(ocra, 0, sizeof(ocra_suite));
 
-	if (NULL == (tofree = string = strdup(suite)))
+	if (NULL == (tofree = string = strdup(suite))) {
 		return RFC6287_ERR_POSIX;
+	}
 
 	if ((NULL == (token = strsep(&string, ":"))) ||
 	    (0 != strcmp(token, "OCRA-1")) ||
@@ -443,8 +480,9 @@ rfc6287_timestamp(const ocra_suite * ocra, uint64_t *T)
 		struct timeval tv;
 		int ret;
 
-		if (0 != (ret = gettimeofday(&tv, NULL)))
+		if (0 != (ret = gettimeofday(&tv, NULL))) {
 			return RFC6287_ERR_POSIX;
+		}
 		*T = tv.tv_sec / ocra->T_step;
 		return RFC6287_SUCCESS;
 	}
@@ -467,16 +505,20 @@ rfc6287_ocra(const ocra_suite * ocra, const char *suite_string,
 	HMAC_CTX ctx;
 
 	if ((0 != (ret = check_di_params(ocra, key_l, Q, P_l, S_l, T))) ||
-	    (0 != (ret = format_questions(ocra, qbuf, Q))))
+	    (0 != (ret = format_questions(ocra, qbuf, Q)))) {
 		return ret;
+	}
 
-	if (flags & FL_C)
+	if (flags & FL_C) {
 		st64be(CBE, C);
-	if (flags & FL_T)
+	}
+	if (flags & FL_T) {
 		st64be(TBE, T);
+	}
 
-	if (NULL == (md = (uint8_t *)malloc(mdlen(ocra->hotp_alg))))
+	if (NULL == (md = (uint8_t *)malloc(mdlen(ocra->hotp_alg)))) {
 		return RFC6287_ERR_POSIX;
+	}
 
 	HMAC_CTX_init(&ctx);
 	if ((1 != HMAC_Init(&ctx, key, key_l, evp_md(ocra->hotp_alg))) ||
@@ -521,44 +563,51 @@ rfc6287_verify(const ocra_suite * ocra, const char *suite_string,
 
 	if ((0 != check_di_params(ocra, key_l, Q, P_l, S_l, T)) ||
 	    (timestamp_offset && !(flags & FL_T)) ||
-	    (counter_window && !(flags & FL_C)))
+	    (counter_window && !(flags & FL_C))) {
 		return RFC6287_INVALID_PARAMS;
+	}
 
 	buf_l = 128 + suite_l;
 	C_off = suite_l;
 	if (flags & FL_C) {
 		buf_l += 8;
 		Q_off = C_off + 8;
-	} else
+	} else {
 		Q_off = C_off;
+	}
 	P_off = Q_off + 128;
 	if (flags & FL_P) {
 		buf_l += P_l;
 		S_off = P_off + P_l;
-	} else
+	} else {
 		S_off = P_off;
+	}
 	if (flags & FL_S) {
 		buf_l += S_l;
 		T_off = S_off + S_l;
-	} else
+	} else {
 		T_off = S_off;
-	if (flags & FL_T)
+	}
+	if (flags & FL_T) {
 		buf_l += 8;
+	}
 
-
-	if (NULL == (buf = (uint8_t *)malloc(buf_l)))
+	if (NULL == (buf = (uint8_t *)malloc(buf_l))) {
 		return RFC6287_ERR_POSIX;
+	}
 
 	memcpy(buf, suite_string, suite_l);
 
-	if ((0 != (ret = format_questions(ocra, buf + Q_off, Q))))
+	if ((0 != (ret = format_questions(ocra, buf + Q_off, Q)))) {
 		goto out;
+	}
 
-	if (flags & FL_P)
+	if (flags & FL_P) {
 		memcpy(buf + P_off, P, P_l);
-	if (flags & FL_S)
+	}
+	if (flags & FL_S) {
 		memcpy(buf + S_off, S, S_l);
-
+	}
 
 	if (flags & FL_T) {
 		uint64_t TT = T - timestamp_offset;
@@ -572,14 +621,16 @@ rfc6287_verify(const ocra_suite * ocra, const char *suite_string,
 					next_C)))
 					goto out;
 			} else if (RFC6287_VERIFY_FAILED !=
-			    (ret = verify(ocra, key, key_l, buf, buf_l, resp)))
+			    (ret = verify(ocra, key, key_l, buf, buf_l, resp))) {
 				goto out;
+			}
 		}
-	} else if (flags & FL_C)
+	} else if (flags & FL_C) {
 		ret = verify_c(ocra, C_off, key, key_l, C, buf, buf_l, resp,
 		    counter_window, next_C);
-	else
+	} else {
 		ret = verify(ocra, key, key_l, buf, buf_l, resp);
+	}
 
 out:
 	free(buf);
@@ -592,10 +643,12 @@ rfc6287_challenge(const ocra_suite * ocra, char **questions)
 	int i;
 	uint8_t buf[64];
 
-	if (1 != RAND_bytes(buf, sizeof(buf)))
+	if (1 != RAND_bytes(buf, sizeof(buf))) {
 		return RFC6287_ERR_OPENSSL;
-	if (NULL == (*questions = (char *)malloc(ocra->Q_l + 1)))
+	}
+	if (NULL == (*questions = (char *)malloc(ocra->Q_l + 1))) {
 		return RFC6287_ERR_POSIX;
+	}
 
 	(*questions)[ocra->Q_l] = 0;
 	for (i = 0; ocra->Q_l > i; i++)

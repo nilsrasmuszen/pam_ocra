@@ -58,15 +58,17 @@ pin_hash(const ocra_suite * ocra, const char *pin, uint8_t **P, size_t *P_l)
 	*P_l = mdlen(ocra->P_alg);
 	EVP_MD_CTX_init(&ctx);
 
-	if (NULL == (*P = (uint8_t *)malloc(*P_l)))
+	if (NULL == (*P = (uint8_t *)malloc(*P_l))) {
 		err(EX_OSERR, "malloc() failed");
+	}
 
 	if ((1 != EVP_DigestInit(&ctx, evp_md(ocra->P_alg))) ||
 	    (1 != EVP_DigestUpdate(&ctx, pin, strlen(pin))) ||
 	    (1 != EVP_DigestFinal(&ctx, *P, &s)) ||
-	    (s != *P_l))
+	    (s != *P_l)) {
 		errx(EX_OSERR, "pin_hash() failed: %s",
 		    ERR_error_string(ERR_get_error(), NULL));
+	}
 	EVP_MD_CTX_cleanup(&ctx);
 }
 
@@ -76,8 +78,9 @@ parse_counter(const char *in, uint64_t *C)
 	char *stopped;
 	int base = strncmp("0x", in, 2) ? 10 : 16;
 
-	if ('-' == in[0])
+	if ('-' == in[0]) {
 		return -1;
+	}
 	*C = strtouq(in, &stopped, base);
 	if (ULLONG_MAX == *C || 0 == *C) {
 		if (errno)
@@ -94,8 +97,9 @@ parse_num(const char *in)
 	char *stopped;
 	int x = (int)strtol(in, &stopped, 10);
 
-	if (*stopped || (0 > x))
+	if (*stopped || (0 > x)) {
 		return -1;
+	}
 	return x;
 }
 
@@ -105,14 +109,16 @@ from_hex(const char *in, uint8_t **out, size_t len)
 	uint32_t i;
 
 	//XXX len-check, assert
-	if (0 == strncmp("0x", in, 2))
+	if (0 == strncmp("0x", in, 2)) {
 		in += 2;
+	}
 	if (strlen(in) % 2 == 1) {
 		printf("number of chars in key not correct\n");
 		return -1;
 	}
-	if (NULL == (*out = (uint8_t *)malloc(len)))
+	if (NULL == (*out = (uint8_t *)malloc(len))) {
 		return -1;
+	}
 	for (i = 0; i < len; i++) {
 		if (1 != sscanf(&in[i * 2], "%2hhx", *out + i)) {
 			fprintf(stderr, "scanf %%2hhx failed.\n");
@@ -232,8 +238,9 @@ cmd_info(int argc, char **argv)
 			errx(EX_SOFTWARE, "pin hash size does not match suite!");
 		}
 		printf("pin_hash:\t0x");
-		for (i = 0; V.size > i; i++)
+		for (i = 0; V.size > i; i++) {
 			printf("%02x", ((uint8_t *)(V.data))[i]);
+		}
 		printf("\n");
 	}
 	if (ocra.flags & FL_T) {
@@ -263,23 +270,27 @@ test_input(const ocra_suite * ocra, const char *suite_string,
 	char *questions;
 	char *response;
 
-	if (RFC6287_SUCCESS != (r = rfc6287_challenge(ocra, &questions)))
+	if (RFC6287_SUCCESS != (r = rfc6287_challenge(ocra, &questions))) {
 		errx(EX_SOFTWARE, "rfc6287_challenge() failed: %s",
 		    rfc6287_err(r));
+	}
 
-	if (RFC6287_SUCCESS != (r = rfc6287_timestamp(ocra, &T)))
+	if (RFC6287_SUCCESS != (r = rfc6287_timestamp(ocra, &T))) {
 		errx(EX_SOFTWARE, "rfc6287_timestamp() failedi: %s",
 		    rfc6287_err(r));
+	}
 
 	if (RFC6287_SUCCESS != (r = rfc6287_ocra(ocra, suite_string,
-	    key, key_l, C, questions, P, P_l, NULL, 0, T, &response)))
+	    key, key_l, C, questions, P, P_l, NULL, 0, T, &response))) {
 		errx(EX_SOFTWARE, "rfc6287_ocra() failed: %s", rfc6287_err(r));
+	}
 
 	if (RFC6287_SUCCESS != (r = rfc6287_verify(ocra, suite_string,
 	    key, key_l, C, questions, P, P_l, NULL, 0, T, response,
-	    counter_window, &next_counter, timestamp_offset)))
+	    counter_window, &next_counter, timestamp_offset))) {
 		errx(EX_SOFTWARE, "rfc6287_verify() failed: %s",
 		    rfc6287_err(r));
+	}
 
 	free(response);
 	free(questions);
@@ -442,9 +453,10 @@ cmd_init(int argc, char **argv)
 	}
 
 	if (ocra.flags & FL_C) {
-		if (NULL == counter_string)
+		if (NULL == counter_string) {
 			errx(EX_CONFIG, "suite requires counter parameter "
 			    "(-c <counter> missing)");
+		}
 		if (-1 == parse_counter(counter_string, &C)) {
 			errx(EX_CONFIG, "invalid counter value");
 		}
@@ -485,25 +497,30 @@ cmd_init(int argc, char **argv)
 	}
 
 	if (ocra.flags & FL_P) {
-		if (NULL != pin_string && NULL != pin_hash_string)
+		if (NULL != pin_string && NULL != pin_hash_string) {
 			errx(EX_CONFIG, "exactly one of -p <pin> and -P "
 			    "<pinhash> must be set");
-		if (NULL != pin_string)
+		}
+		if (NULL != pin_string) {
 			pin_hash(&ocra, pin_string, &P, &P_l);
-		else if (NULL != pin_hash_string) {
+		} else if (NULL != pin_hash_string) {
 			P_l = mdlen(ocra.P_alg);
-			if (0 != from_hex(pin_hash_string, &P, P_l))
+			if (0 != from_hex(pin_hash_string, &P, P_l)) {
 				errx(EX_CONFIG, "invalid pinhash");
-		} else
+			}
+		} else {
 			errx(EX_CONFIG, "suite requires pin parameter "
 			    "(-p <pin> or -P <pinhash> missing)");
-	} else if (NULL != pin_string || NULL != pin_hash_string)
+		}
+	} else if (NULL != pin_string || NULL != pin_hash_string) {
 		errx(EX_CONFIG, "suite does not require pin parameter"
 		    " (-p <pin> and -P <pinhash> must not be set)");
+	}
 
 	key_l = mdlen(ocra.hotp_alg);
-	if (0 != from_hex(key_string, &key, key_l))
+	if (0 != from_hex(key_string, &key, key_l)) {
 		errx(EX_CONFIG, "invalid key");
+	}
 
 	test_input(&ocra, suite_string, key, key_l, C, P, P_l,
 	    counter_window, timestamp_offset);
@@ -568,8 +585,9 @@ cmd_sync_counter(int argc, char **argv)
 	}
 	argc -= optind;
 	if ((0 != argc) ||
-	    (NULL == fname))
+	    (NULL == fname)) {
 		usage();
+	}
 
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
@@ -592,15 +610,17 @@ cmd_sync_counter(int argc, char **argv)
 int
 main(int argc, char **argv)
 {
-	if (2 > argc)
+	if (2 > argc) {
 		usage();
-	if (0 == strcmp(argv[1], "init"))
+	}
+	if (0 == strcmp(argv[1], "init")) {
 		cmd_init(argc - 1, argv + 1);
-	else if (0 == strcmp(argv[1], "info"))
+	} else if (0 == strcmp(argv[1], "info")) {
 		cmd_info(argc - 1, argv + 1);
-	else if (0 == strcmp(argv[1], "sync_counter"))
+	} else if (0 == strcmp(argv[1], "sync_counter")) {
 		cmd_sync_counter(argc - 1, argv + 1);
-	else
+	} else {
 		usage();
+	}
 	return 0;
 }

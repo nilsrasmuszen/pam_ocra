@@ -173,8 +173,9 @@ verify(const char *path, const char *user_name, const char *questions,
 	 * the user.  Fail out if it doesn't exist.
 	 */
 	r = config_db_open(&db, DB_OPEN_FLAGS_RW, path, user_id, NULL, NULL);
-	if (PAM_SUCCESS != r)
+	if (PAM_SUCCESS != r) {
 		return r;
+	}
 
 	KEY(K, "suite");
 	if (0 != config_db_get(db, &K, &V))
@@ -191,8 +192,9 @@ verify(const char *path, const char *user_name, const char *questions,
 		goto out;
 	}
 	KEY(K, "key");
-	if (0 != config_db_get(db, &K, &V))
+	if (0 != config_db_get(db, &K, &V)) {
 		goto out;
+	}
 	if (NULL == (key = (uint8_t *)malloc(V.size))) {
 		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
 		goto out;
@@ -202,19 +204,22 @@ verify(const char *path, const char *user_name, const char *questions,
 
 	if (ocra.flags & FL_C) {
 		KEY(K, "C");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		memcpy(&C, V.data, sizeof(C));
 
 		KEY(K, "counter_window");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		memcpy(&counter_window, V.data, sizeof(counter_window));
 	}
 	if (ocra.flags & FL_P) {
 		KEY(K, "P");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		if (NULL == (P = (uint8_t *)malloc(V.size))) {
 			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
 			goto out;
@@ -224,8 +229,9 @@ verify(const char *path, const char *user_name, const char *questions,
 	}
 	if (ocra.flags & FL_T) {
 		KEY(K, "timestamp_offset");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		memcpy(&timestamp_offset, V.data, sizeof(timestamp_offset));
 
 		if (0 != rfc6287_timestamp(&ocra, &T)) {
@@ -250,14 +256,16 @@ verify(const char *path, const char *user_name, const char *questions,
 			}
 		}
 		ret = PAM_SUCCESS;
-	} else if (RFC6287_VERIFY_FAILED == r)
+	} else if (RFC6287_VERIFY_FAILED == r){
 		ret = PAM_AUTH_ERR;
-	else
+	} else {
 		syslog(LOG_ERR, "rfc6287_challenge() failed: %s",
 		    rfc6287_err(r));
+	}
 out:
-	if (0 != config_db_close(db))
+	if (0 != config_db_close(db)) {
 		syslog(LOG_ERR, "db->close() failed: %s", strerror(errno));
+	}
 	free(suite_string);
 	free(key);
 	free(P);
@@ -301,8 +309,9 @@ find_counter(const char *path,
 		return r;
 
 	KEY(K, "suite");
-	if (0 != config_db_get(db, &K, &V))
+	if (0 != config_db_get(db, &K, &V)) {
 		goto out;
+	}
 	if (NULL == (suite_string = (char *)malloc(V.size))) {
 		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
 		goto out;
@@ -315,8 +324,9 @@ find_counter(const char *path,
 		goto out;
 	}
 	KEY(K, "key");
-	if (0 != config_db_get(db, &K, &V))
+	if (0 != config_db_get(db, &K, &V)) {
 		goto out;
+	}
 	if (NULL == (key = (uint8_t *)malloc(V.size))) {
 		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
 		goto out;
@@ -326,19 +336,22 @@ find_counter(const char *path,
 
 	if (ocra.flags & FL_C) {
 		KEY(K, "C");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		memcpy(&C, V.data, sizeof(C));
 
 		KEY(K, "counter_window");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		memcpy(&counter_window, V.data, sizeof(counter_window));
 	}
 	if (ocra.flags & FL_P) {
 		KEY(K, "P");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		if (NULL == (P = (uint8_t *)malloc(V.size))) {
 			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
 			goto out;
@@ -348,8 +361,9 @@ find_counter(const char *path,
 	}
 	if (ocra.flags & FL_T) {
 		KEY(K, "timestamp_offset");
-		if (0 != config_db_get(db, &K, &V))
+		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
+		}
 		memcpy(&timestamp_offset, V.data, sizeof(timestamp_offset));
 
 		if (0 != rfc6287_timestamp(&ocra, &T)) {
@@ -394,8 +408,9 @@ find_counter(const char *path,
 		break;
 	}
 out:
-	if (0 != config_db_close(db))
+	if (0 != config_db_close(db)) {
 		syslog(LOG_ERR, "db->close() failed: %s", strerror(errno));
+	}
 	free(suite_string);
 	free(key);
 	free(P);

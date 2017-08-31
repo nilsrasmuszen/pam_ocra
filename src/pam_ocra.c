@@ -241,8 +241,9 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	/* Get options */
 #ifndef _OPENPAM
 	pam_err = pam_get_item(pamh, PAM_CONV, (const void **)&conv);
-	if (pam_err != PAM_SUCCESS)
+	if (pam_err != PAM_SUCCESS) {
 		return (PAM_SYSTEM_ERR);
+	}
 	msg.msg_style = PAM_PROMPT_ECHO_OFF;
 	msg.msg = password_prompt;
 	msgp = &msg;
@@ -283,8 +284,10 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	/* Generate the prompt */
 	make_prompt(fmt, sizeof(fmt), questions, cmsg, rmsg);
 
-	if (PAM_SUCCESS != (ret = get_response(pamh, fmt, &response)))
+	if (PAM_SUCCESS != (ret = get_response(pamh, fmt, &response))) {
 		goto end;
+	}
+
 
 	if (PAM_SUCCESS != qret) {
 		/*
