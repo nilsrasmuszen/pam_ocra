@@ -6,13 +6,22 @@ pam_ocra
 Limitations
 -----------
 
-  - intended target platform is FreeBSD
+  - intended target platform is GNU/Linux
   - Session DataInput parameter is not supported
 
 Installation
 ----------------
 
-Use the FreeBSD port security/pam_ocra
+Use the Linux port security/pam_ocra
+
+  - install berkleydb 5.3
+  - install openssl (dev packages with headers)
+  - install pam (dev packages with headers)
+  - install autotools
+  - PREFIX=/path/to/install make -f Makefile.default all
+    (runs autotools, configure && make)
+  - make install (depending of prefix as root)
+  - configure pam to use the library
 
 Basic Use
 --------------
@@ -33,6 +42,14 @@ and sshd is configured to use PAM, "foobar" can log in using an OCRA token.
 
 Changelog
 ---------
+
+- 1.4:
+
+  * port code to linux (fork, not compatible with FreeBSD)
+
+  * introduce db_storage for general access to the configuration
+
+  * enclose in autotools
 
 - 1.3:
 

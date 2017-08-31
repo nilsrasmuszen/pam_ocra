@@ -1,0 +1,15 @@
+dnl Process this file with autoconf to produce a configure script.
+AM_INIT_AUTOMAKE([subdir-objects])
+
+AM_PROG_LIBTOOL
+AC_PROG_CXX
+AM_PROG_CC_C_O
+
+m4_include([autotools/m4/pkg.m4])
+m4_include([autotools/m4/ax_transform.m4])
+
+pkgconfigdir='${libdir}/pkgconfig'
+libpam_ocra_includedir='${includedir}/pam_ocra'
+
+AC_SUBST([pkgconfigdir])
+AC_SUBST([libpam_ocra_includedir])

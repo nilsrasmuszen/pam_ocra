@@ -1,0 +1,22 @@
+# aclocal / autoreconf files
+aclocal.m4
+autom4te.cache/
+configure
+config.log
+config.status
+config.transform
+libtool
+Makefile
+Makefile.in
+.deps/
+.libs/
+
+# output files
+ocra_tool
+rfc6287_test
+*.o
+*.lo
+*.la
+*.so
+*.so.*
+.dirstamp

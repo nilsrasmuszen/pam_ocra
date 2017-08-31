@@ -1,0 +1,48 @@
+#!/usr/bin/env make
+
+# Makefile for bootstrapping autotools from source package
+# aclocal and autoreconf are required, but the files it generates
+# should not be in the git repository
+
+PLATFORM ?= $(shell uname -s)-$(shell uname -m)
+CFLAGS=-O2 -g3 -Wall -fPIC
+CXXFLAGS=-O2 -g3 -Wall -fPIC
+LDFLAGS=
+PREFIX ?= /usr/local
+
+BUILD_PLATFORM=$(shell uname -s)
+CFLAGS_DARWIN=-D__unix__ -D__darwin__ -Dunix
+
+ifeq ($(BUILD_PLATFORM),Darwin)
+  CFLAGS:=$(CFLAGS) $(CFLAGS_DARWIN)
+  CXXFLAGS:=$(CXXFLAGS) $(CFLAGS_DARWIN)
+  LDFLAGS:=-headerpad_max_install_names
+endif
+
+all check clean dist distclean install uninstall: Makefile
+	$(MAKE) $@
+
+Makefile config.status newconf: Makefile.default configure
+	PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" CXXFLAGS="$(CXXFLAGS)" LDFLAGS="$(LDFLAGS)" ./configure \
+	    --prefix=$(PREFIX)
+
+clean_autotools:
+	rm -r autom4te.cache || true
+	rm aclocal.m4 || true
+	rm configure || true
+	rm config.log || true
+	rm config.status || true
+	rm config.transform || true
+	rm libtool || true
+	find . -type d | grep .deps | xargs rm -r || true
+	find . -type d | grep .libs | xargs rm -r || true
+	find . | grep '/Makefile$$' | xargs rm || true
+	find . | grep '/Makefile.in$$' | xargs rm || true
+	find . | grep '\.la$$' | xargs rm || true
+	find . | grep '\.lo$$' | xargs rm || true
+	find . | grep '\.o$$' | xargs rm || true
+	find . | grep '\.dirstamp' | xargs rm || true
+
+configure: configure.ac Makefile.am autotools/Makefile.am autotools/common.ac
+	aclocal
+	autoreconf -if
