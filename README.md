@@ -24,7 +24,7 @@ Use the Linux port security/pam_ocra
   - configure pam to use the library
 
 Basic Use
---------------
+---------
 
     $ ocra_tool init -f ~foobar/.ocra \
               -s OCRA-1:HOTP-SHA1-6:C-QN08-PSHA1 \
@@ -34,11 +34,121 @@ Basic Use
 will create the ocra db file ".ocra" in the home directory of user "foobar";
 set the OCRA suite, key, counter, counter_window and pin.
 
-if for example /etc/pam.d/sshd has the line
+If for example /etc/pam.d/sshd has the line
 
-    auth    sufficient    /usr/local/lib/pam_ocra.so
+    auth    required    /usr/local/lib/pam_ocra.so
 
 and sshd is configured to use PAM, "foobar" can log in using an OCRA token.
+
+If for example /etc/pam.d/xscreensaver has the line
+
+    auth    required    /usr/local/lib/pam_ocra.so
+
+and xscreensaver is configured to use PAM, "foobar" can log in using an OCRA
+token.
+
+Advanced Use
+------------
+
+    $ ocra_tool sync_counter -f ~foobar/.ocra \
+              -c 12345678 -r 000000 -v 111111
+
+will sync the counter in the ocra db file ".ocra" in the home directory of user
+"foobar" to the counter in the OTP token by brute forcing for the challenge
+12345678 until the response 000000 is found and the following response 111111
+validates.
+
+PAM Options
+~~~~~~~~~~~
+
+If you add arguments to the line in the PAM config, it is possible to change
+the appearance of the challenge.
+
+    cmsg=Challenge:%_%a% rmsg=Response:%_ cpad=3
+
+Available format strings are:
+
+ * %a: Accessible OCRA challenge (separate every cpad bytes)
+ * %c: OCRA challenge
+ * %u: UTC time
+ * %l: Local time
+ * %_: A literal space
+ * %%: A literal percent sign
+
+
+Two Factor Authentication
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use the OCRA token to secure services is done by adding the pam_ocra.so to
+the associated /etc/pam.d configuration. The following examples enable 2FA for
+OpenSSH and Sudo
+
+
+OpenSSH
++++++++
+
+To configure the *OpenSSH* service to use the OCRA token as a second factor,
+remove the pam_unix *auth* method from /etc/pam.d/sshd (or its includes) and
+change the /etc/ssh/sshd_config to have the *ChallengeResponseAuthentication*
+set to *Yes* and allow publickey,keyboard-interactive:pam as
+*AuthenticationMethods*. The ',' means that both methods are required.
+
+    ChallengeResponseAuthentication yes
+    AuthenticationMethods publickey,keyboard-interactive:pam
+
+
+Sudo
+++++
+
+If for /etc/pam.d/sudo has the line
+
+    auth    required    /usr/local/lib/pam_ocra.so
+
+and "foobar" is configured in /etc/sudoers, "foobar" can sudo using an OCRA
+token.
+
+
+OTP usage
+~~~~~~~~~
+
+Use the OCRA token to secure systems by not setting any passwords for users but
+force them to use the token to authenticate. The following examples enable OTP
+for OpenSSH and Sudo
+
+
+OpenSSH
++++++++
+
+To configure the *OpenSSH* service to use only the OCRA token, remove the *auth*
+pam_unix method from /etc/pam.d/sshd and change the /etc/ssh/sshd_config to have
+the *ChallengeResponseAuthentication* set to *Yes* and disallow other
+*AuthenticationMethods* than *keyboard-interactive:pam*.
+
+    ChallengeResponseAuthentication yes
+    AuthenticationMethods keyboard-interactive:pam
+
+
+Sudo
+++++
+
+To configure a server with sudo and no dedicated passwords, for the users,
+remove the pam_unix auth method from /etc/pam.d/sudo.
+
+
+Untested Services
+~~~~~~~~~~~~~~~~~
+
+PAM can be used for authentication for many services. Sometimes the service
+needs some activation to use PAM (like OpenSSH) or to build special modules
+(like nginx).
+
+The process is then similar to the above described examples.
+
+Always make sure that
+
+* You can login the configured user with a correct OCRA Challenge/Response
+* You cannot login the configured user with a bad Response
+
 
 Changelog
 ---------
@@ -50,6 +160,8 @@ Changelog
   * introduce db_storage for general access to the configuration
 
   * enclose in autotools
+
+  * padding options for the prompt
 
 - 1.3:
 
