@@ -46,13 +46,17 @@ static char password_prompt[] = "Password:";
 #endif
 /*
  * Challenge Prompt
+ * %a: Accessible OCRA challenge (separate every two bytes)
  * %c: OCRA challenge
  * %u: UTC time
  * %l: Local time
+ * %_: A literal space
+ * %%: A literal percent sign
  * Not printing OCRA to avoid information leak
  */
-#define PROMPT_CHALLENGE "Challenge: %c (%u)"
+#define PROMPT_CHALLENGE "Challenge: %a (%u)"
 #define PROMPT_RESPONSE "Response: "
+#define PROMPT_ACCESSIBLE_PAD 4
 
 #define LOG_NAME "pam_ocra"
 #define MODULE_NAME "pam_ocra"
@@ -86,11 +90,14 @@ adjust_return(const char *nodata, int ret)
 }
 
 static void
-fmt_prompt(char *mbuf, int msize, const char *questions, const char *pmsg)
+fmt_prompt(char *mbuf, int msize, const char *questions, const char *pmsg,
+    int cpad)
 {
 	char *mptr = mbuf;
 	const char *pptr = pmsg;
 	int mrsize = 0;
+	int qlen = strlen(questions);
+	int qpos = 0;
 	time_t epoch_seconds;
 	struct tm *now;
 
@@ -120,11 +127,17 @@ fmt_prompt(char *mbuf, int msize, const char *questions, const char *pmsg)
 				pptr++;
 				break;
 
+			case '_':	/* Literal ' ' */
+				*mptr++ = ' ';
+				mrsize++;
+				pptr++;
+				break;
+
 			case 'u':	/* UTC time */
 				time(&epoch_seconds);
 				now = gmtime(&epoch_seconds);
 				strftime(mptr, msize - mrsize,
-				    "%Y-%m-%dT%H:%M:%SZ %Z", now);
+				    "%Y-%m-%dT%H:%M:%SZ", now);
 				mrsize = strlen(mbuf);
 				mptr = &mbuf[mrsize];
 				pptr++;
@@ -147,6 +160,28 @@ fmt_prompt(char *mbuf, int msize, const char *questions, const char *pmsg)
 				mptr = &mbuf[mrsize];
 				pptr++;
 				break;
+
+			case 'a':	/* Accessible Challenge question */
+				for (qpos = 0; qpos < strlen(questions); qpos++) {
+					snprintf(mptr, msize - mrsize,
+					    "%c", questions[qpos]);
+					mrsize = strlen(mbuf);
+					mptr = &mbuf[mrsize];
+					if (qpos == qlen - 1) {
+						/* Avoid trailing blank */
+						continue;
+					}
+					if (cpad <= 0) {
+						continue;
+					}
+					if ((qpos + 1) % cpad == 0) {
+						snprintf(mptr, msize - mrsize, " ");
+						mrsize = strlen(mbuf);
+						mptr = &mbuf[mrsize];
+					}
+				}
+				pptr++;
+				break;
 			}
 		}
 
@@ -157,7 +192,7 @@ fmt_prompt(char *mbuf, int msize, const char *questions, const char *pmsg)
 
 static void
 make_prompt(char *buf, int bsize, const char *questions,
-    const char *cmsg, const char *rmsg)
+    const char *cmsg, const char *rmsg, int cpad)
 {
 	char cbuf[512];
 	char rbuf[512];
@@ -168,8 +203,8 @@ make_prompt(char *buf, int bsize, const char *questions,
 		rmsg = PROMPT_RESPONSE;
 	}
 	/* Generate each prompt */
-	fmt_prompt(cbuf, sizeof(cbuf), questions, cmsg);
-	fmt_prompt(rbuf, sizeof(rbuf), questions, rmsg);
+	fmt_prompt(cbuf, sizeof(cbuf), questions, cmsg, cpad);
+	fmt_prompt(rbuf, sizeof(rbuf), questions, rmsg, cpad);
 
 	/* Concatinate them to the final prompt */
 	if (NULL != cmsg && NULL != rmsg) {
@@ -214,11 +249,14 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 {
 	int qret;
 	int ret;
+	int argi;
+	char *ep;
 	const char *dir = NULL;
 	const char *fake_suite = NULL;
 	const char *nodata = NULL;
 	const char *cmsg = NULL;
 	const char *rmsg = NULL;
+	int cpad = PROMPT_ACCESSIBLE_PAD;
 	char *questions;
 	const char *user;
 	char *response = NULL;
@@ -247,12 +285,41 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	msg.msg_style = PAM_PROMPT_ECHO_OFF;
 	msg.msg = password_prompt;
 	msgp = &msg;
+	for (argi = 0; argi < argc; argi++) {
+		if (strlen(argv[argi]) < 6) {
+			continue;
+		} else if (0 == strncmp(argv[argi], "fake_prompt=", 12)) {
+			rmsg = argv[argi] + 12;
+		} else if (0 == strncmp(argv[argi], "dir=", 4)) {
+			rmsg = argv[argi] + 4;
+		} else if (0 == strncmp(argv[argi], "nodata=", 7)) {
+			rmsg = argv[argi] + 7;
+		} else if (0 == strncmp(argv[argi], "cmsg=", 5)) {
+			cmsg = argv[argi] + 5;
+		} else if (0 == strncmp(argv[argi], "rmsg=", 5)) {
+			rmsg = argv[argi] + 5;
+		} else if (0 == strncmp(argv[argi], "cpad=", 5)) {
+			cpad = strtol(argv[argi] + 5, &ep, 10);
+			if (NULL == ep) {
+				cpad = PROMPT_ACCESSIBLE_PAD;
+			}
+		} else {
+			syslog(LOG_ERR, "Unknown option", argv[argi]);
+		}
+	}
 #else
 	fake_suite = openpam_get_option(pamh, "fake_prompt");
 	dir = openpam_get_option(pamh, "dir");
 	nodata = openpam_get_option(pamh, "nodata");
 	cmsg = openpam_get_option(pamh, "cmsg");
 	rmsg = openpam_get_option(pamh, "rmsg");
+	cpad_s = openpam_get_option(pamh, "cpad");
+	if (NULL != cpad_s) {
+		cpad = strtol(argv[argi] + 5, &ep, 10);
+		if (NULL == ep) {
+			cpad = PROMPT_ACCESSIBLE_PAD;
+		}
+	}
 #endif
 
 	/*
@@ -283,7 +350,7 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 		goto end;
 	}
 	/* Generate the prompt */
-	make_prompt(fmt, sizeof(fmt), questions, cmsg, rmsg);
+	make_prompt(fmt, sizeof(fmt), questions, cmsg, rmsg, cpad);
 
 	if (PAM_SUCCESS != (ret = get_response(pamh, fmt, &response))) {
 		goto end;
