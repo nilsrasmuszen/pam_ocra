@@ -81,7 +81,7 @@ Two Factor Authentication
 
 Use the OCRA token to secure services is done by adding the pam_ocra.so to
 the associated /etc/pam.d configuration. The following examples enable 2FA for
-OpenSSH and Sudo
+OpenSSH and Sudo.
 
 
 OpenSSH
@@ -97,8 +97,8 @@ set to *Yes* and allow publickey,keyboard-interactive:pam as
     AuthenticationMethods publickey,keyboard-interactive:pam
 
 
-Sudo
-++++
+app-admin/sudo
+++++++++++++++
 
 If for /etc/pam.d/sudo has the line
 
@@ -116,8 +116,8 @@ force them to use the token to authenticate. The following examples enable OTP
 for OpenSSH and Sudo
 
 
-OpenSSH
-+++++++
+net-misc/openssh
+++++++++++++++++
 
 To configure the *OpenSSH* service to use only the OCRA token, remove the *auth*
 pam_unix method from /etc/pam.d/sshd and change the /etc/ssh/sshd_config to have
@@ -128,8 +128,8 @@ the *ChallengeResponseAuthentication* set to *Yes* and disallow other
     AuthenticationMethods keyboard-interactive:pam
 
 
-Sudo
-++++
+app-admin/sudo
+++++++++++++++
 
 To configure a server with sudo and no dedicated passwords, for the users,
 remove the pam_unix auth method from /etc/pam.d/sudo.
@@ -148,6 +148,90 @@ Always make sure that
 
 * You can login the configured user with a correct OCRA Challenge/Response
 * You cannot login the configured user with a bad Response
+
+Should you deploy ocra_pam with one of the following services, please add
+the appropriate configuration as a pull request.
+
+
+Database Services
++++++++++++++++++
+
+Avoid knowledge of a password for administration of services.
+Single Factor
+
+    dev-db/mariadb
+    dev-db/percona-server
+    dev-db/postgresql
+
+
+Communication Services
+++++++++++++++++++++++
+
+Add second factor for services.
+
+    net-im/jabberd2
+    net-mail/cyrus-imapd
+    net-mail/dovecot
+    net-proxy/dante
+    net-proxy/squid
+    net-vpn/openvpn
+    www-apache/pwauth
+    www-servers/cherokee
+    www-servers/nginx
+    www-servers/uwsgi
+
+
+Remote Login Services
++++++++++++++++++++++
+
+Add second factor for services.
+
+    net-misc/dropbear
+    -net-misc/openssh-
+    net-misc/tigervnc
+
+
+File Services
++++++++++++++
+
+    net-fs/samba
+    net-ftp/ftpbase
+    net-ftp/lftp
+    net-ftp/proftpd
+    net-ftp/pure-ftpd
+    net-ftp/vsftpd
+
+
+Login Services
+++++++++++++++
+
+    app-admin/sudo
+    lxde-base/lxdm
+    gnome-base/gdm
+    x11-apps/xdm
+    x11-misc/cdm
+    x11-misc/i3lock
+    x11-misc/lightdm
+    x11-misc/slim
+    x11-misc/wdm
+
+
+Terminal Lock Services
+++++++++++++++++++++++
+
+    gnome-extra/cinnamon-screensaver
+    kde-plasma/kscreenlocker
+    mate-extra/mate-screensaver
+    x11-misc/alock
+    x11-misc/xlockmore
+    x11-misc/xscreensaver
+
+
+Desktop Keyring Services
+++++++++++++++++++++++++
+
+    gnome-base/gnome-keyring
+    kde-plasma/kwallet-pam
 
 
 Changelog
