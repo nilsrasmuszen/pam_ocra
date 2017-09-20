@@ -140,6 +140,15 @@ To configure a server with sudo and no dedicated passwords, for the users,
 remove the pam_unix auth method from /etc/pam.d/sudo.
 
 
+x11-misc/xscreensaver
++++++++++++++++++++++
+
+To configure a terminal to request the OCRA challenge for a screen locked with
+xscreensaver, add the following line to /etc/pam.d/xscreensaver:
+
+    auth    required    /usr/local/lib/pam_ocra.so
+
+
 Untested Services
 ~~~~~~~~~~~~~~~~~
 
@@ -210,12 +219,12 @@ File Services
 Login Services
 ++++++++++++++
 
-    app-admin/sudo
+    -app-admin/sudo-
     lxde-base/lxdm
     gnome-base/gdm
     x11-apps/xdm
     x11-misc/cdm
-    x11-misc/i3lock
+    -x11-misc/i3lock-
     x11-misc/lightdm
     x11-misc/slim
     x11-misc/wdm
@@ -229,7 +238,7 @@ Terminal Lock Services
     mate-extra/mate-screensaver
     x11-misc/alock
     x11-misc/xlockmore
-    x11-misc/xscreensaver
+    -x11-misc/xscreensaver-
 
 
 Desktop Keyring Services
@@ -238,6 +247,16 @@ Desktop Keyring Services
     gnome-base/gnome-keyring
     kde-plasma/kwallet-pam
 
+
+Not working Services
+~~~~~~~~~~~~~~~~~~~~
+
+There are various services that may not implement the PAM interface to display
+a custom login prompt. Those services are listed here.
+When you patched the service, please notify its upstream and create a pull
+request to update this list.
+
+    x11-misc/i3lock
 
 Changelog
 ---------
