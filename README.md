@@ -258,6 +258,19 @@ request to update this list.
 
     x11-misc/i3lock
 
+
+Todo
+----
+
+Kill Pin
+~~~~~~~~
+
+Optionally provide a additional pin to ocra_tool init. When this pin used to
+create the response, the stored key is reset and/or the counter is set outside
+of the defined window. The mechanism must not change the authentication time so
+it is not visible from outside that the token is useless.
+
+
 Changelog
 ---------
 
