@@ -1,7 +1,8 @@
 pam_ocra
-=======
+========
 
 [RFC6287](http://tools.ietf.org/html/rfc6287) (OCRA) pam module
+
 
 Limitations
 -----------
@@ -9,8 +10,9 @@ Limitations
   - intended target platform is GNU/Linux
   - Session DataInput parameter is not supported
 
+
 Installation
-----------------
+------------
 
 Use the Linux port security/pam_ocra
 
@@ -18,10 +20,11 @@ Use the Linux port security/pam_ocra
   - install openssl (dev packages with headers)
   - install pam (dev packages with headers)
   - install autotools
-  - PREFIX=/path/to/install make -f Makefile.default all
+  - PREFIX=/usr/local make -f Makefile.default all
     (runs autotools, configure && make)
   - make install (depending of prefix as root)
   - configure pam to use the library
+
 
 Basic Use
 ---------
@@ -47,6 +50,7 @@ If for example /etc/pam.d/xscreensaver has the line
 and xscreensaver is configured to use PAM, "foobar" can log in using an OCRA
 token.
 
+
 Advanced Use
 ------------
 
@@ -57,6 +61,7 @@ will sync the counter in the ocra db file ".ocra" in the home directory of user
 "foobar" to the counter in the OTP token by brute forcing for the challenge
 12345678 until the response 000000 is found and the following response 111111
 validates.
+
 
 PAM Options
 ~~~~~~~~~~~
@@ -84,8 +89,8 @@ the associated /etc/pam.d configuration. The following examples enable 2FA for
 OpenSSH and Sudo.
 
 
-OpenSSH
-+++++++
+net-misc/openssh
+++++++++++++++++
 
 To configure the *OpenSSH* service to use the OCRA token as a second factor,
 remove the pam_unix *auth* method from /etc/pam.d/sshd (or its includes) and
@@ -147,7 +152,7 @@ The process is then similar to the above described examples.
 Always make sure that
 
 * You can login the configured user with a correct OCRA Challenge/Response
-* You cannot login the configured user with a bad Response
+* You cannot login the configured user with a bad/no Response
 
 Should you deploy ocra_pam with one of the following services, please add
 the appropriate configuration as a pull request.
