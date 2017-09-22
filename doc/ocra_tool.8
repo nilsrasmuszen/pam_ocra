@@ -60,6 +60,10 @@
 .Ar response
 .Fl v
 .Ar second_response
+.Nm
+.Cm test
+.Fl f
+.Ar credential_file
 .Sh DESCRIPTION
 The
 .Nm
@@ -150,6 +154,14 @@ First response for the given challenge.
 .It Fl v Ar second response
 Second response for the given challenge.
 .El
+.El
+.Bl -tag -width ".Cm test"
+.It Cm test
+Test the given credential_file. Produces a Prompt like the pam_module would do
+and displays the result (Success/Failure) when a response is entered.
+.Bl -tag -width ".FL f"
+.It Fl f Ar credential_file
+the OCRA credential file.
 .El
 .Sh EXAMPLE
 $ ocra_tool init -f ~/.ocra -s OCRA-1:HOTP-SHA1-6:C-QN08-PSHA1 \\
