@@ -274,7 +274,7 @@ a custom login prompt. Those services are listed here.
 When you patched the service, please notify its upstream and create a pull
 request to update this list.
 
-    x11-misc/i3lock
+    x11-misc/i3lock (no mode to display challenge)
 
 
 Todo
