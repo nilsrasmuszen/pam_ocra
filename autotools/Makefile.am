@@ -7,8 +7,19 @@ libpam_ocra_la_DEPENDENCIES = $(pam_ocra_DEPENDS)
 libpam_ocra_la_SOURCES = src/ocra.c
 libpam_ocra_la_SOURCES += src/pam_ocra.c
 libpam_ocra_la_SOURCES += src/pam_prompt.c
-libpam_ocra_la_SOURCES += src/db_storage.c
 libpam_ocra_la_SOURCES += src/rfc6287.c
+libpam_ocra_la_SOURCES += src/storage_util.c
+if USE_LDAP
+libpam_ocra_la_SOURCES += src/ldap_storage.c
+libpam_ocra_la_SOURCES += src/ldap_storage_session.c
+libpam_ocra_la_SOURCES += src/ldap_storage_config.c
+libpam_ocra_la_SOURCES += src/ldap_storage_rebind.c
+libpam_ocra_la_SOURCES += src/ldap_storage_userinfo.c
+libpam_ocra_la_SOURCES += src/ldap_storage_util.c
+libpam_ocra_la_SOURCES += src/ldap_storage_values.c
+else
+libpam_ocra_la_SOURCES += src/db_storage.c
+endif
 libpam_ocra_include_HEADERS = include/rfc6287.h
 
 bin_PROGRAMS += rfc6287_test

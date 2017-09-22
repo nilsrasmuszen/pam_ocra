@@ -25,27 +25,16 @@
  *
  */
 #pragma once
-
-#include <db.h>
-
-
-#define DB_OPEN_FLAGS_RO DB_RDONLY
-#define DB_OPEN_FLAGS_RW 0
-#define DB_OPEN_FLAGS_CREATE DB_CREATE
+#include "include/config.h"
+#include <sys/param.h>
 
 
-int
-config_db_get(DB * db, DBT * K, DBT * V);
-
-int
-config_db_put(DB * db, DBT * K, DBT * V);
-
-int
-config_db_close(DB * db);
-
-int
-config_db_open(DB ** db, int flags, const char *path, const int user_id,
-    const char *nodata, const char *fake_suite);
-
-int
-config_db_sync(DB * db);
+#define VALUE(v, s, z) \
+    memcpy( \
+        v.data = V_buf, \
+        s, \
+        v.size = MIN(z, sizeof(V_buf)));
+// static buffers for keys and values (see defines above)
+// keys: code controlled
+// values: user controlled
+static char V_buf[254];

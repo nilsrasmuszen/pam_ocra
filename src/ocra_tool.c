@@ -24,7 +24,10 @@
  * SUCH DAMAGE.
  *
  */
+#include <include/config.h>
 
+#include <pwd.h>
+#include <syslog.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -43,103 +46,55 @@
 
 #include <rfc6287.h>
 #include <db_storage.h>
+#include <storage_key.h>
+#include <storage_util.h>
+#include <storage_value.h>
 #include <ocra.h>
 #include <pam_prompt.h>
 #include <security/pam_modules.h>
 
-#ifndef bsd
-#define ishexnumber isxdigit
-#endif
+
 
 static void
 pin_hash(const ocra_suite * ocra, const char *pin, uint8_t **P, size_t *P_l)
 {
-	unsigned int s;
-	EVP_MD_CTX ctx;
+    unsigned int s;
+    EVP_MD_CTX ctx;
 
-	*P = NULL;
-	*P_l = mdlen(ocra->P_alg);
-	EVP_MD_CTX_init(&ctx);
+    *P = NULL;
+    *P_l = mdlen(ocra->P_alg);
+    EVP_MD_CTX_init(&ctx);
 
-	if (NULL == (*P = (uint8_t *)malloc(*P_l))) {
-		err(EX_OSERR, "malloc() failed");
-	}
+    if (NULL == (*P = (uint8_t *)malloc(*P_l))) {
+        err(EX_OSERR, "malloc() failed");
+    }
 
-	if ((1 != EVP_DigestInit(&ctx, evp_md(ocra->P_alg))) ||
-	    (1 != EVP_DigestUpdate(&ctx, pin, strlen(pin))) ||
-	    (1 != EVP_DigestFinal(&ctx, *P, &s)) ||
-	    (s != *P_l)) {
-		errx(EX_OSERR, "pin_hash() failed: %s",
-		    ERR_error_string(ERR_get_error(), NULL));
-	}
-	EVP_MD_CTX_cleanup(&ctx);
-}
-
-static int
-parse_counter(const char *in, uint64_t *C)
-{
-	char *stopped;
-	int base = strncmp("0x", in, 2) ? 10 : 16;
-
-	if ('-' == in[0]) {
-		return -1;
-	}
-	*C = strtouq(in, &stopped, base);
-	if (ULLONG_MAX == *C || 0 == *C) {
-		if (errno)
-			return -1;
-	}
-	if (*stopped)
-		return -1;
-	return 0;
-}
-
-static int
-parse_num(const char *in)
-{
-	char *stopped;
-	int x = (int)strtol(in, &stopped, 10);
-
-	if (*stopped || (0 > x)) {
-		return -1;
-	}
-	return x;
-}
-
-static int
-from_hex(const char *in, uint8_t **out, size_t len)
-{
-	uint32_t i;
-
-	//XXX len-check, assert
-	if (0 == strncmp("0x", in, 2)) {
-		in += 2;
-	}
-	if (strlen(in) % 2 == 1) {
-		printf("number of chars in key not correct\n");
-		return -1;
-	}
-	if (NULL == (*out = (uint8_t *)malloc(len))) {
-		return -1;
-	}
-	for (i = 0; i < len; i++) {
-		if (1 != sscanf(&in[i * 2], "%2hhx", *out + i)) {
-			fprintf(stderr, "scanf %%2hhx failed.\n");
-			free(*out);
-			return -1;
-		}
-		if (!ishexnumber(toupper(in[(i * 2) + 1]))) {
-			fprintf(stderr, "ishexnumber \"%c\"@%d failed.\n", in[(i * 2) + 1], i);
-			free(*out);
-			return -1;
-		}
-	}
-	return 0;
+    if ((1 != EVP_DigestInit(&ctx, evp_md(ocra->P_alg))) ||
+        (1 != EVP_DigestUpdate(&ctx, pin, strlen(pin))) ||
+        (1 != EVP_DigestFinal(&ctx, *P, &s)) ||
+        (s != *P_l)) {
+        errx(EX_OSERR, "pin_hash() failed: %s",
+            ERR_error_string(ERR_get_error(), NULL));
+    }
+    EVP_MD_CTX_cleanup(&ctx);
 }
 
 static void
 usage(void)
 {
+#ifdef USE_LDAP
+	fprintf(stderr,
+	    "usage: ocra_tool init -k key -s suite_string\n"
+	    "                     [-c counter] [-p pin | -P pin_hash]\n"
+	    "                     [-q kill_pin | -Q kill_pin_hash]\n"
+	    "                     [-w counter_window] [-t timestamp_offset]\n"
+	    "                     [-u user_name]\n"
+	    "       ocra_tool info [-u user_name]\n"
+	    "       ocra_tool sync [-u user_name]\n"
+	    "                 -c challenge\n"
+	    "                 -r response -v second_response\n"
+	    "       ocra_tool test [-u user_name]\n");
+#else
 	fprintf(stderr,
 	    "usage: ocra_tool init -f credential_file -k key -s suite_string\n"
 	    "                     [-c counter] [-p pin | -P pin_hash]\n"
@@ -150,6 +105,7 @@ usage(void)
 	    "                 -c challenge\n"
 	    "                 -r response -v second_response\n"
 	    "       ocra_tool test -f credential_file\n");
+#endif
 	exit(-1);
 }
 
@@ -168,12 +124,13 @@ cmd_info(int argc, char **argv)
 	DBT K, V;
 
 	int user_id = geteuid();
-
+#ifndef USE_LDAP
 	while (-1 != (ch = getopt(argc, argv, "f:"))) {
 		switch (ch) {
 		case 'f':
-			if (NULL != fname)
+			if (NULL != fname) {
 				usage();
+			}
 			fname = optarg;
 			break;
 		default:
@@ -182,8 +139,43 @@ cmd_info(int argc, char **argv)
 	}
 	argc -= optind;
 	if ((0 != argc) ||
-	    (NULL == fname))
+	    (NULL == fname)) {
 		usage();
+	}
+#endif
+#ifdef USE_LDAP
+	char *user_name = NULL;
+	while (-1 != (ch = getopt(argc, argv, "u:"))) {
+		switch (ch) {
+		case 'u':
+			if (NULL != user_name) {
+				usage();
+			}
+			user_name = optarg;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	if ((0 != argc)) {
+		usage();
+	}
+	if (NULL != user_name) {
+		if (geteuid() != 0) {
+			fprintf(stderr,
+			    "Only root is allowed to request other users infos.\n");
+			exit(1);
+		}
+		struct passwd *pwd = NULL;
+		if (NULL == (pwd = getpwnam(user_name))) {
+			fprintf(stderr, "Failure getting user_name: %s: %s",
+			    user_name, strerror(errno));
+			exit(1);
+		}
+		user_id = pwd->pw_uid;
+	}
+#endif
 
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
@@ -194,23 +186,22 @@ cmd_info(int argc, char **argv)
 	}
 	KEY(K, "suite");
 	if (0 != (ret = config_db_get(db, &K, &V))) {
-		errx(EX_OSERR, "db->get() failed: %s",
+		errx(EX_OSERR, "db->get() suite failed: %s",
 		    (1 == ret) ? "key not in db" : strerror(errno));
 	}
-	printf("suite:\t\t%s\n", (char *)(V.data));
 
 	if (RFC6287_SUCCESS != (ret = rfc6287_parse_suite(&ocra, V.data))) {
-		errx(EX_SOFTWARE, "rfc6287_parse_suite() failed: %s",
+		errx(EX_SOFTWARE, "info: rfc6287_parse_suite() failed: %s",
 		    rfc6287_err(ret));
 	}
-
 	KEY(K, "key");
 	if (0 != (ret = config_db_get(db, &K, &V))) {
-		errx(EX_OSERR, "db->get() failed: %s",
+		errx(EX_OSERR, "db->get() key failed: %s",
 		    (1 == ret) ? "key not in db" : strerror(errno));
 	}
 	if (mdlen(ocra.hotp_alg) != V.size) {
-		errx(EX_SOFTWARE, "key size does not match suite!");
+		errx(EX_SOFTWARE, "key size %ul does not match suite (%zu)!",
+		    V.size, mdlen(ocra.hotp_alg));
 	}
 
 
@@ -220,7 +211,7 @@ cmd_info(int argc, char **argv)
 
 		KEY(K, "C");
 		if (0 != (ret = config_db_get(db, &K, &V))) {
-			errx(EX_OSERR, "db->get() failed: %s",
+			errx(EX_OSERR, "db->get() counter C failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
 		}
 		memcpy(&C, V.data, sizeof(C));
@@ -228,7 +219,7 @@ cmd_info(int argc, char **argv)
 
 		KEY(K, "counter_window");
 		if (0 != (ret = config_db_get(db, &K, &V))) {
-			errx(EX_OSERR, "db->get() failed: %s",
+			errx(EX_OSERR, "db->get() counter_window failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
 		}
 		memcpy(&CW, V.data, sizeof(CW));
@@ -237,7 +228,7 @@ cmd_info(int argc, char **argv)
 	if (ocra.flags & FL_P) {
 		KEY(K, "P");
 		if (0 != (ret = config_db_get(db, &K, &V))) {
-			errx(EX_OSERR, "db->get() failed: %s",
+			errx(EX_OSERR, "db->get() pin P failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
 		}
 
@@ -272,7 +263,7 @@ cmd_info(int argc, char **argv)
 
 		KEY(K, "timestamp_offset");
 		if (0 != (ret = config_db_get(db, &K, &V))) {
-			errx(EX_OSERR, "db->get() failed: %s",
+			errx(EX_OSERR, "db->get() timestamp_offset failed: %s",
 			    (1 == ret) ? "key not in db" : strerror(errno));
 		}
 		memcpy(&TO, V.data, sizeof(TO));
@@ -414,6 +405,7 @@ cmd_init(int argc, char **argv)
 	int r;
 	int ch;
 	char *fname = NULL;
+	char *user_name = NULL;
 	char *suite_string = NULL;
 	char *key_string = NULL;
 	char *pin_string = NULL;
@@ -426,8 +418,8 @@ cmd_init(int argc, char **argv)
 
 	ocra_suite ocra;
 	uint64_t C = 0;
-	int timestamp_offset = 0;
-	int counter_window = 0;
+	uint64_t timestamp_offset = 0;
+	uint64_t counter_window = 0;
 
 	uint8_t *P = NULL;
 	size_t P_l = 0;
@@ -435,14 +427,24 @@ cmd_init(int argc, char **argv)
 	size_t KP_l = 0;
 	uint8_t *key = NULL;
 	size_t key_l = 0;
-
-	while (-1 != (ch = getopt(argc, argv, "f:s:k:p:P:q:Q:c:w:t:"))) {
+#ifdef USE_LDAP
+	const char* getopt_opts = "u:s:k:p:P:q:Q:c:w:t:";
+#else
+	const char* getopt_opts = "f:s:k:p:P:q:Q:c:w:t:";
+#endif
+	while (-1 != (ch = getopt(argc, argv, getopt_opts))) {
 		switch (ch) {
 		case 'f':
 			if (NULL != fname) {
 				usage();
 			}
 			fname = optarg;
+			break;
+		case 'u':
+			if (NULL != user_name) {
+				usage();
+			}
+			user_name = optarg;
 			break;
 		case 's':
 			if (NULL != suite_string) {
@@ -503,16 +505,39 @@ cmd_init(int argc, char **argv)
 		}
 	}
 	argc -= optind;
-	if ((0 != argc) ||
-	    (NULL == fname) ||
-	    (NULL == suite_string) ||
+	if ((0 != argc)) {
+		usage();
+	}
+#ifdef USE_LDAP
+	if ((NULL != user_name)) {
+		if (geteuid() != 0) {
+			fprintf(stderr,
+			    "Only root is allowed to sync other users counters.\n");
+			exit(1);
+		}
+	} else {
+		struct passwd *pwd = NULL;
+		if (NULL == (pwd = getpwuid(geteuid()))) {
+			fprintf(stderr, "Failure getting user_name for current user: %s",
+			    strerror(errno));
+			exit(1);
+		}
+		user_name = pwd->pw_name;
+	}
+#else
+	if ((NULL == fname)) {
+		usage();
+	}
+#endif
+
+	if ((NULL == suite_string) ||
 	    (NULL == key_string)) {
 		usage();
 	}
 
 	if (RFC6287_SUCCESS != (r = rfc6287_parse_suite(&ocra, suite_string))) {
-		err(EX_CONFIG, "rfc6287_parse_suite() failed: %s",
-		    rfc6287_err(r));
+		err(EX_CONFIG, "init: rfc6287_parse_suite() failed: %s / %s",
+		    rfc6287_err(r), suite_string);
 	}
 
 	if (ocra.flags & FL_C) {
@@ -520,13 +545,13 @@ cmd_init(int argc, char **argv)
 			errx(EX_CONFIG, "suite requires counter parameter "
 			    "(-c <counter> missing)");
 		}
-		if (-1 == parse_counter(counter_string, &C)) {
+		if (-1 == uint64_from_hex_string(counter_string, &C)) {
 			errx(EX_CONFIG, "invalid counter value");
 		}
 		if (NULL != counter_window_string) {
-			if (-1 ==
-			    (counter_window = parse_num(counter_window_string))) {
-				errx(EX_CONFIG, "invalud counter window value");
+			if (-1 == uint64_from_hex_string(counter_window_string,
+			    &counter_window)) {
+				errx(EX_CONFIG, "invalid counter window value");
 			}
 		}
 	} else {
@@ -546,8 +571,8 @@ cmd_init(int argc, char **argv)
 	}
 
 	if (ocra.flags & FL_T) {
-		if (-1 ==
-		    (timestamp_offset = parse_num(timestamp_offset_string))) {
+		if (-1 == uint64_from_hex_string(timestamp_offset_string,
+		    &timestamp_offset)) {
 			errx(EX_CONFIG, "invalid timestamp offset value");
 		}
 	} else if (NULL != timestamp_offset_string) {
@@ -568,7 +593,7 @@ cmd_init(int argc, char **argv)
 			pin_hash(&ocra, pin_string, &P, &P_l);
 		} else if (NULL != pin_hash_string) {
 			P_l = mdlen(ocra.P_alg);
-			if (0 != from_hex(pin_hash_string, &P, P_l)) {
+			if (0 != uint8_array_from_hex_string(pin_hash_string, &P, P_l)) {
 				errx(EX_CONFIG, "invalid pin_hash");
 			}
 		} else {
@@ -579,7 +604,7 @@ cmd_init(int argc, char **argv)
 			pin_hash(&ocra, kill_pin_string, &KP, &KP_l);
 		} else if (NULL != pin_hash_string) {
 			KP_l = mdlen(ocra.P_alg);
-			if (0 != from_hex(pin_hash_string, &KP, KP_l)) {
+			if (0 != uint8_array_from_hex_string(pin_hash_string, &KP, KP_l)) {
 				errx(EX_CONFIG, "invalid kill_pin_hash");
 			}
 		}
@@ -591,14 +616,16 @@ cmd_init(int argc, char **argv)
 	}
 
 	key_l = mdlen(ocra.hotp_alg);
-	if (0 != from_hex(key_string, &key, key_l)) {
+	if (0 != uint8_array_from_hex_string(key_string, &key, key_l)) {
 		errx(EX_CONFIG, "invalid key");
 	}
 
 	test_input(&ocra, suite_string, key, key_l, C, P, P_l, KP, KP_l,
 	    counter_window, timestamp_offset);
 
+#ifndef USE_LDAP
 	unlink(fname);
+#endif
 	write_db(fname, suite_string, key, key_l, C, P, P_l, KP, KP_l,
 	    counter_window, timestamp_offset);
 
@@ -607,32 +634,33 @@ cmd_init(int argc, char **argv)
 static void
 cmd_sync_counter(int argc, char **argv)
 {
-	int ch, ret;
-	uint32_t i;
+	int ch;
 	char *fname = NULL;
+	char *user_name = NULL;
 	char *challenge = NULL;
 	char *response1 = NULL;
 	char *response2 = NULL;
-	ocra_suite ocra;
 
-	const char *nodata = NULL;
-	const char *fake_suite = NULL;
-
-	DB *db;
 	DBT K, V;
 
-	uint64_t C;
-	int CW;
-
-	int user_id = geteuid();
-
-	while (-1 != (ch = getopt(argc, argv, "f:c:r:v:"))) {
+#ifdef USE_LDAP
+	const char* getopt_opts = "u:c:r:v:";
+#else
+	const char* getopt_opts = "f:c:r:v:";
+#endif
+	while (-1 != (ch = getopt(argc, argv, getopt_opts))) {
 		switch (ch) {
 		case 'f':
 			if (NULL != fname) {
 				usage();
 			}
 			fname = optarg;
+			break;
+		case 'u':
+			if (NULL != user_name) {
+				usage();
+			}
+			user_name = optarg;
 			break;
 		case 'c':
 			if (NULL != challenge) {
@@ -657,10 +685,36 @@ cmd_sync_counter(int argc, char **argv)
 		}
 	}
 	argc -= optind;
-	if ((0 != argc) ||
-	    (NULL == fname)) {
+	if ((0 != argc)) {
 		usage();
 	}
+#ifdef USE_LDAP
+	if (NULL != user_name) {
+		if (geteuid() != 0) {
+			fprintf(stderr,
+			    "Only root is allowed to sync other users counters.\n");
+			exit(1);
+		}
+	} else {
+		struct passwd *pwd = NULL;
+		if (NULL == (pwd = getpwuid(geteuid()))) {
+			fprintf(stderr, "Failure getting user_name for current user: %s",
+			    strerror(errno));
+			exit(1);
+		}
+		user_name = pwd->pw_name;
+	}
+#else
+	if (NULL == fname) {
+		usage();
+	}
+	if (NULL == (pwd = getpwuid(geteuid()))) {
+		fprintf(stderr, "Failure getting user_name for current user: %s",
+		    strerror(errno));
+		exit(1);
+	}
+	user_name = pwd->pw_name;
+#endif
 
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
@@ -676,51 +730,71 @@ cmd_sync_counter(int argc, char **argv)
 	}
 
 	printf("Brute forcing verify function...\n");
-	find_counter(fname, challenge, response1, response2);
+	find_counter(fname, user_name, challenge, response1, response2);
 	printf("done\n");
 }
 
 static void
 cmd_test(int argc, char **argv)
 {
-	int ch, ret, qret, cpad;
-	uint32_t i;
+	int ch, ret, qret;
 	char *fname = NULL;
+	char *user_name = NULL;
 	char response[64];
 	char fmt[512];
 	char *questions;
-	char *cmsg;
-	char *rmsg;
 	const char* FAKE_USER = "root";  // this user must exist
 
-	ocra_suite ocra;
-
-	DB *db;
 	DBT K, V;
 
-	uint64_t C;
-	int CW;
-
-	int user_id = geteuid();
-
-	while (-1 != (ch = getopt(argc, argv, "f:"))) {
+#ifdef USE_LDAP
+	const char* getopt_opts = "u:";
+#else
+	const char* getopt_opts = "f:";
+#endif
+	while (-1 != (ch = getopt(argc, argv, getopt_opts))) {
 		switch (ch) {
-		case 'f':
-			if (NULL != fname) {
+			case 'f':
+				if (NULL != fname) {
+					usage();
+				}
+				fname = optarg;
+				break;
+			case 'u':
+				if (NULL != user_name)
+					usage();
+				user_name = optarg;
+				break;
+			default:
 				usage();
-			}
-			fname = optarg;
-			break;
-		default:
-			usage();
 		}
 	}
 	argc -= optind;
-	if ((0 != argc) ||
-	    (NULL == fname)) {
+	if ((0 != argc)) {
 		usage();
 	}
-
+#ifdef USE_LDAP
+	if (NULL != user_name) {
+		if (geteuid() != 0) {
+			fprintf(stderr,
+			    "Only root is allowed to request other users infos.\n");
+			exit(1);
+		}
+		FAKE_USER = user_name;
+	} else {
+		struct passwd *pwd = NULL;
+		if (NULL == (pwd = getpwuid(geteuid()))) {
+			fprintf(stderr,
+			    "Failed to getpwuid for current user.\n");
+			exit(1);
+		}
+		FAKE_USER = pwd->pw_name;
+	}
+#else /* USE_LDAP */
+	if (NULL == fname) {
+		usage();
+	}
+#endif /* USE_LDAP */
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
 
@@ -729,7 +803,7 @@ cmd_test(int argc, char **argv)
 	qret = challenge(fname, FAKE_USER, &questions, NULL, NULL);
 	if (PAM_SUCCESS != qret && PAM_NO_MODULE_DATA != qret) {
 		printf("No challenge was generated.\n");
-		return;
+		exit(1);
 	}
 	make_prompt(fmt, sizeof(fmt), questions,
 		PROMPT_CHALLENGE, PROMPT_RESPONSE, PROMPT_ACCESSIBLE_PAD);
@@ -739,11 +813,14 @@ cmd_test(int argc, char **argv)
 		ret = verify(fname, FAKE_USER, questions, response);
 		if (PAM_SUCCESS == ret) {
 			printf("Success.\n");
+			exit(0);
 		} else {
 			printf("Failure.\n");
+			exit(1);
 		}
 	} else {
 		printf("Failure reading from stdin.\n");
+		exit(1);
 	}
 }
 

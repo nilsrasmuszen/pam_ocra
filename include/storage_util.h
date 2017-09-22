@@ -25,27 +25,16 @@
  *
  */
 #pragma once
-
-#include <db.h>
-
-
-#define DB_OPEN_FLAGS_RO DB_RDONLY
-#define DB_OPEN_FLAGS_RW 0
-#define DB_OPEN_FLAGS_CREATE DB_CREATE
-
+#include "include/config.h"
 
 int
-config_db_get(DB * db, DBT * K, DBT * V);
+uint8_array_from_hex_string(const char * in, uint8_t ** out, size_t len);
 
 int
-config_db_put(DB * db, DBT * K, DBT * V);
+uint64_from_hex_string(const char *in, uint64_t *out);
 
 int
-config_db_close(DB * db);
+hex_string_from_uint8_array(const uint8_t *in, size_t len, char ** out);
 
 int
-config_db_open(DB ** db, int flags, const char *path, const int user_id,
-    const char *nodata, const char *fake_suite);
-
-int
-config_db_sync(DB * db);
+hex_string_from_uint64(const uint8_t *in, size_t len, char ** out);

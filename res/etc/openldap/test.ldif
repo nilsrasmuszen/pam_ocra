@@ -1,0 +1,23 @@
+version: 1
+
+dn: dc=my-domain,dc=com
+objectClass: organizationalUnit
+objectClass: dcObject
+dc: my-domain
+ou: my-domain.com
+
+dn: uid=nils,dc=my-domain,dc=com
+objectClass: PAMOCRA
+objectClass: person
+objectClass: top
+cn: nils
+key: BAD4EEBAD4EEBAD4EEBAD4EEBAD4EEBAD4EEBAD4
+sn: nils
+suite: OCRA-1:HOTP-SHA1-6:C-QN08-PSHA1
+uid: nils
+counter: 0x0
+counterWindow: 0xff
+description: Test User
+killPinHash: 0x1110111011101110111011101110111011101110
+pinHash: 0x0110110110110110110110110110110110110110
+timestampOffset: 0

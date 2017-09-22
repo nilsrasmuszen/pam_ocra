@@ -26,13 +26,30 @@
  */
 #pragma once
 
-#include <db.h>
+#include <ldap_storage_intern.h>
+#include <sys/param.h>
 
 
 #define DB_OPEN_FLAGS_RO DB_RDONLY
 #define DB_OPEN_FLAGS_RW 0
 #define DB_OPEN_FLAGS_CREATE DB_CREATE
 
+/*
+ * DB type for transparent use as db_storage replacement.
+ */
+typedef struct DB_t {
+    int (*open)();
+    int (*close)();
+    int (*put)();
+    int (*get)();
+    int (*sync)();
+    ldap_session_t* session;
+} DB;
+
+typedef struct DBT_t {;
+    char *data;
+    size_t size;
+} DBT;
 
 int
 config_db_get(DB * db, DBT * K, DBT * V);
@@ -44,8 +61,8 @@ int
 config_db_close(DB * db);
 
 int
-config_db_open(DB ** db, int flags, const char *path, const int user_id,
-    const char *nodata, const char *fake_suite);
+config_db_open(DB ** db, int flags, const char * path, const int user_id,
+    const char * nodata, const char * fake_suite);
 
 int
 config_db_sync(DB * db);

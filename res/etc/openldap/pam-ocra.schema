@@ -1,0 +1,114 @@
+# PAM-OCRA
+## This work is part of PAM-OCRA Software <http://www.openldap.org/>.
+##
+##  Copyright (c) 2017 Nils Rasmuszen
+## All rights reserved.
+##
+## modification, are permitted provided that the following conditions
+## are met:
+## 1. Redistributions of source code must retain the above copyright
+##    notice, this list of conditions and the following disclaimer.
+## 2. Redistributions in binary form must reproduce the above copyright
+##    notice, this list of conditions and the following disclaimer in the
+##    documentation and/or other materials provided with the distribution.
+##
+## THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+## ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+## IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+## ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+## FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+## DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+## OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+## HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+## LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+## OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+## SUCH DAMAGE.
+##
+##
+#
+# PAM-OCRA (RFC6287)
+#
+# Depends upon
+#   Definition of an X.500 Attribute Type and an Object Class to Hold
+#   Uniform Resource Identifiers (URIs) [RFC2079]
+#	(core.schema)
+#
+#   A Summary of the X.500(96) User Schema for use with LDAPv3 [RFC2256]
+#	(core.schema)
+#
+#   The COSINE and Internet X.500 Schema [RFC1274] (cosine.schema)
+
+# Key
+# Key shared with the OTP device specified as hexadecimal string.
+attributeType ( 99.99.0.0.1 NAME 'key'
+                DESC 'Key shared with the OTP device specified as hexadecimal string.'
+                EQUALITY caseIgnoreMatch
+                SUBSTR caseIgnoreSubstringsMatch
+                SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+# Suite
+# Suite for the OTP authentication.
+attributeType ( 99.99.0.0.2 NAME 'suite'
+                DESC 'Suite for the OTP authentication.'
+                EQUALITY caseIgnoreMatch
+                SUBSTR caseIgnoreSubstringsMatch
+                SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+# Counter (optional / suite dependent)
+# Counter in the OTP device
+attributeType ( 99.99.0.0.3 NAME 'counter'
+                DESC 'Counter in the OTP device. Updated on success.'
+                EQUALITY caseIgnoreMatch
+                SUBSTR caseIgnoreSubstringsMatch
+                SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+# Counter Window
+# Counter Window specifies the maximum number of verify attempts
+attributeType ( 99.99.0.0.4 NAME 'counterWindow'
+                DESC 'Counter Window specifies the maximum number of verify attempts'
+                EQUALITY caseIgnoreMatch
+                SUBSTR caseIgnoreSubstringsMatch
+                SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+
+# Timestamp Offset (optional / suite dependent)
+# specifies the number of timestamp steps pam_ocra will make while verifying a
+# response. The verify process will start at (current_timestamp -
+# timestamp_offset ) and end at (current_timestamp + timestamp_offset ).
+attributeType ( 99.99.0.0.5 NAME 'timestampOffset'
+                DESC 'The number of timestamp steps.'
+                EQUALITY caseIgnoreMatch
+                SUBSTR caseIgnoreSubstringsMatch
+                SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+# PIN hash (suite dependent)
+# PIN hash to be used to generate the response.
+attributeType ( 99.99.0.0.6 NAME 'pinHash'
+                DESC 'PIN hash to be used to generate the response.'
+                EQUALITY caseIgnoreMatch
+                SUBSTR caseIgnoreSubstringsMatch
+                SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+# Kill PIN hash (suite dependent)
+# Kill pin that sets the invalidates the key in the database.
+attributeType ( 99.99.0.0.7 NAME 'killPinHash'
+                DESC 'Kill pin that sets the invalidates the key in the database.'
+                EQUALITY caseIgnoreMatch
+                SUBSTR caseIgnoreSubstringsMatch
+                SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+# PAM-OCRA
+# The PAM-OCRA represents people who are associated with an one time password.
+# It is a structural class and is derived
+# from the organizationalPerson which is defined in X.521 [X521].
+objectclass	( 99.99.0.0.0
+	NAME 'PAMOCRA'
+	DESC 'PAM-OCRA'
+	SUP person
+	STRUCTURAL
+	MUST (
+		suite $ key $ uid
+	)
+	MAY (
+		counter $ counterWindow $ pinHash $ killPinHash $ timestampOffset)
+	)

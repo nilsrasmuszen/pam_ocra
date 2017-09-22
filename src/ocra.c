@@ -41,20 +41,22 @@
 #include <rfc6287.h>
 #include <db_storage.h>
 #include <ocra.h>
+#include <storage_key.h>
+
 
 static int
-fake_challenge(const char *suite_string, char **questions)
+fake_challenge(const char * suite_string, char ** questions)
 {
 	int r;
 	ocra_suite ocra;
 
 	if (RFC6287_SUCCESS != (r = rfc6287_parse_suite(&ocra, suite_string))) {
-		syslog(LOG_ERR, "rfc6287_parse_suite() failed for "
-		    "fake_prompt \"%s\": %s", suite_string, rfc6287_err(r));
+		syslog(LOG_ERR, "pam_orca: rfc6287_parse_suite() failed for "
+		    "fake_challenge \"%s\": %s", suite_string, rfc6287_err(r));
 		return PAM_SERVICE_ERR;
 	}
 	if (RFC6287_SUCCESS != (r = rfc6287_challenge(&ocra, questions))) {
-		syslog(LOG_ERR, "rfc6287_challenge() failed: %s",
+		syslog(LOG_ERR, "pam_orca: rfc6287_challenge() failed: %s",
 		    rfc6287_err(r));
 		return PAM_SERVICE_ERR;
 	}
@@ -62,9 +64,10 @@ fake_challenge(const char *suite_string, char **questions)
 	return PAM_NO_MODULE_DATA;
 }
 
+
 int
-challenge(const char *path, const char *user_name, char **questions,
-    const char *nodata, const char *fake_suite)
+challenge(const char * path, const char * user_name, char ** questions,
+    const char * nodata, const char * fake_suite)
 {
 	int r;
 	DB *db = NULL;
@@ -80,7 +83,7 @@ challenge(const char *path, const char *user_name, char **questions,
 
 	errno = 0;
 	if (NULL == (pwd = getpwnam(user_name))) {
-		syslog(LOG_ERR, "Challenge failure getting user_id: %s",
+		syslog(LOG_ERR, "pam_orca: Challenge failure getting user_id: %s",
 		    strerror(errno));
 		return PAM_SERVICE_ERR;
 	}
@@ -89,7 +92,8 @@ challenge(const char *path, const char *user_name, char **questions,
 
 	if (0 != config_db_open(&db, DB_OPEN_FLAGS_RO, path,
 	    user_id, nodata, fake_suite)) {
-		syslog(LOG_ERR, "Configuration for user \"%s\" cannot be opened.",
+		syslog(LOG_ERR, "pam_orca: Configuration for user \"%s\""
+		    " cannot be opened.",
 		    user_name);
 		/* Handle file open errors */
 		if (NULL != path) {
@@ -98,7 +102,8 @@ challenge(const char *path, const char *user_name, char **questions,
 				r = PAM_NO_MODULE_DATA;
 			} else if (NULL == nodata || strcmp(nodata, "fail") == 0) {
 				/* We know we want to fail, so log an error. */
-				syslog(LOG_ERR, "challenge dbopen(\"%s\", ...) failed: %s",
+				syslog(LOG_ERR, "pam_orca: challenge dbopen(\"%s\", ...)"
+				    " failed: %s",
 				    path, strerror(errno));
 				r = PAM_AUTHINFO_UNAVAIL;
 			} else {
@@ -124,21 +129,22 @@ challenge(const char *path, const char *user_name, char **questions,
 	config_db_close(db);
 
 	if (RFC6287_SUCCESS != r) {
-		syslog(LOG_ERR, "rfc6287_parse_suite() failed: %s",
+		syslog(LOG_ERR, "pam_orca: challenge: rfc6287_parse_suite() failed: %s",
 		    rfc6287_err(r));
 		return PAM_SERVICE_ERR;
 	}
 	if (RFC6287_SUCCESS != (r = rfc6287_challenge(&ocra, questions))) {
-		syslog(LOG_ERR, "rfc6287_challenge() failed: %s",
+		syslog(LOG_ERR, "pam_orca: rfc6287_challenge() failed: %s",
 		    rfc6287_err(r));
 		return PAM_SERVICE_ERR;
 	}
 	return PAM_SUCCESS;
 }
 
+
 int
-verify(const char *path, const char *user_name, const char *questions,
-    const char *response)
+verify(const char * path, const char * user_name, const char * questions,
+    const char * response)
 {
 	int ret = PAM_SERVICE_ERR;
 	int r;
@@ -167,7 +173,8 @@ verify(const char *path, const char *user_name, const char *questions,
 
 	errno = 0;
 	if (NULL == (pwd = getpwnam(user_name))) {
-		syslog(LOG_ERR, "verify failure getting user_id: %s", strerror(errno));
+		syslog(LOG_ERR, "pam_orca: verify failure getting user_id: %s",
+		    strerror(errno));
 		return PAM_SERVICE_ERR;
 	}
 	user_id = pwd->pw_uid;
@@ -184,15 +191,16 @@ verify(const char *path, const char *user_name, const char *questions,
 	KEY(K, "suite");
 	if (0 != config_db_get(db, &K, &V))
 		goto out;
-	if (NULL == (suite_string = (char *)malloc(V.size))) {
-		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+	if (NULL == (suite_string = (char *)malloc(V.size + 1))) {
+		syslog(LOG_ERR, "pam_orca: verify: malloc() failed: %s",
+		    strerror(errno));
 		goto out;
 	}
-	memcpy(suite_string, V.data, V.size);
+	memcpy(suite_string, V.data, V.size + 1);
 
 	if (RFC6287_SUCCESS != (r = rfc6287_parse_suite(&ocra, suite_string))) {
-		syslog(LOG_ERR, "rfc6287_parse_suite() failed: %s",
-		    rfc6287_err(r));
+		syslog(LOG_ERR, "pam_orca: verify: rfc6287_parse_suite(%s) failed: %s",
+		    suite_string, rfc6287_err(r));
 		goto out;
 	}
 	KEY(K, "key");
@@ -200,7 +208,8 @@ verify(const char *path, const char *user_name, const char *questions,
 		goto out;
 	}
 	if (NULL == (key = (uint8_t *)malloc(V.size))) {
-		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+		syslog(LOG_ERR, "pam_orca: verify: malloc() failed: %s",
+		    strerror(errno));
 		goto out;
 	}
 	memcpy(key, V.data, V.size);
@@ -225,7 +234,8 @@ verify(const char *path, const char *user_name, const char *questions,
 			goto out;
 		}
 		if (NULL == (P = (uint8_t *)malloc(V.size))) {
-			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+			syslog(LOG_ERR, "pam_orca: verify: malloc() failed: %s",
+			    strerror(errno));
 			goto out;
 		}
 		memcpy(P, V.data, V.size);
@@ -235,7 +245,8 @@ verify(const char *path, const char *user_name, const char *questions,
 			goto out;
 		}
 		if (NULL == (KP = (uint8_t *)malloc(V.size))) {
-			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+			syslog(LOG_ERR, "pam_orca: verify: malloc() failed: %s",
+			    strerror(errno));
 			goto out;
 		}
 		memcpy(KP, V.data, V.size);
@@ -249,7 +260,7 @@ verify(const char *path, const char *user_name, const char *questions,
 		memcpy(&timestamp_offset, V.data, sizeof(timestamp_offset));
 
 		if (0 != rfc6287_timestamp(&ocra, &T)) {
-			syslog(LOG_ERR, "rfc6287_timestamp() failed: %s",
+			syslog(LOG_ERR, "pam_orca: verify: rfc6287_timestamp() failed: %s",
 			    rfc6287_err(r));
 			goto out;
 		}
@@ -266,7 +277,8 @@ verify(const char *path, const char *user_name, const char *questions,
 			r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
 			    P, P_l, NULL, 0, T, response, counter_window, &next_counter,
 			    timestamp_offset);
-			syslog(LOG_ERR, "Authentication Success for user %s with kill_pin",
+			syslog(LOG_ERR,
+			    "pam_orca: Authentication Success for user %s with kill_pin",
 			    user_name);
 			ret = PAM_AUTH_ERR;
 
@@ -276,9 +288,9 @@ verify(const char *path, const char *user_name, const char *questions,
 			key[0] = key[0] + 1;
 			V.data = &key;
 			V.size = key_l;
-			syslog(LOG_USER, "Key updated to invalid by kill pin.");
+			syslog(LOG_USER, "pam_orca: Key updated to invalid by kill pin.");
 			if (0 != config_db_put(db, &K, &V)) {
-				syslog(LOG_ERR, "db->put() failed for %s: %s",
+				syslog(LOG_ERR, "pam_orca: db->put() failed for %s: %s",
 				    (const char *)(K.data),
 				    strerror(errno));
 				goto out;
@@ -294,10 +306,10 @@ verify(const char *path, const char *user_name, const char *questions,
 			KEY(K, "C");
 			V.data = &next_counter;
 			V.size = sizeof(uint64_t);
-			syslog(LOG_USER, "Counter updated to %02x.",
+			syslog(LOG_USER, "pam_orca: Counter updated to %02x.",
 			    ((uint8_t)(next_counter)));
 			if (0 != config_db_put(db, &K, &V)) {
-				syslog(LOG_ERR, "db->put() failed for %s: %s",
+				syslog(LOG_ERR, "pam_orca: db->put() failed for %s: %s",
 				    (const char *)(K.data),
 				    strerror(errno));
 				goto out;
@@ -305,16 +317,17 @@ verify(const char *path, const char *user_name, const char *questions,
 		}
 		ret = PAM_SUCCESS;
 	} else if (RFC6287_VERIFY_FAILED == r){
-		syslog(LOG_ERR, "Authentication Error for user %s with challenge %s "
+		syslog(LOG_ERR,
+		    "pam_orca: Authentication Error for user %s with challenge %s "
 		    "and response %s", user_name, questions, response);
 		ret = PAM_AUTH_ERR;
 	} else {
-		syslog(LOG_ERR, "rfc6287_challenge() failed: %s",
+		syslog(LOG_ERR, "pam_orca: rfc6287_challenge() failed: %s",
 		    rfc6287_err(r));
 	}
 out:
 	if (0 != config_db_close(db)) {
-		syslog(LOG_ERR, "db->close() failed: %s", strerror(errno));
+		syslog(LOG_ERR, "pam_orca: db->close() failed: %s", strerror(errno));
 	}
 	free(suite_string);
 	free(key);
@@ -324,8 +337,8 @@ out:
 
 
 int
-find_counter(const char *path,
-    const char *questions, const char *response1, const char *response2)
+find_counter(const char * path, const char * user_name,
+    const char * questions, const char * response1, const char * response2)
 {
 	int ret = PAM_SERVICE_ERR;
 	int r, rv;
@@ -336,8 +349,6 @@ find_counter(const char *path,
 	uint8_t *key = NULL;
 	size_t key_l = 0;
 	uint64_t C = 0;
-	uint64_t CS = 0;
-	uint64_t notify_mod = UINT64_MAX / 100000;
 	uint8_t *P = NULL;
 	size_t P_l = 0;
 	uint64_t T = 0;
@@ -346,30 +357,40 @@ find_counter(const char *path,
 	uint64_t next_counter;
 	ocra_suite ocra;
 	int user_id = 0;
+	struct passwd *pwd = NULL;
 
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
+
+	errno = 0;
+	if (NULL == (pwd = getpwnam(user_name))) {
+		syslog(LOG_ERR, "pam_orca: find_counter failure getting user_id: %s",
+		    strerror(errno));
+		return PAM_SERVICE_ERR;
+	}
+	user_id = pwd->pw_uid;
 
 	/*
 	 * This function will only be called with a valid db file.
 	 *  Fail out if it doesn't exist.
 	 */
-	r = config_db_open(&db, DB_OPEN_FLAGS_RW, path, 0, NULL, NULL);
-	if (PAM_SUCCESS != r)
+	r = config_db_open(&db, DB_OPEN_FLAGS_RW, path, user_id, NULL, NULL);
+	if (PAM_SUCCESS != r) {
 		return r;
+	}
 
 	KEY(K, "suite");
 	if (0 != config_db_get(db, &K, &V)) {
 		goto out;
 	}
 	if (NULL == (suite_string = (char *)malloc(V.size))) {
-		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+		syslog(LOG_ERR, "pam_orca: malloc() failed: %s", strerror(errno));
 		goto out;
 	}
 	memcpy(suite_string, V.data, V.size);
 
 	if (RFC6287_SUCCESS != (r = rfc6287_parse_suite(&ocra, suite_string))) {
-		syslog(LOG_ERR, "rfc6287_parse_suite() failed: %s",
+		syslog(LOG_ERR, "pam_orca: rfc6287_parse_suite() failed: %s",
 		    rfc6287_err(r));
 		goto out;
 	}
@@ -378,7 +399,7 @@ find_counter(const char *path,
 		goto out;
 	}
 	if (NULL == (key = (uint8_t *)malloc(V.size))) {
-		syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+		syslog(LOG_ERR, "pam_orca: malloc() failed: %s", strerror(errno));
 		goto out;
 	}
 	memcpy(key, V.data, V.size);
@@ -403,7 +424,7 @@ find_counter(const char *path,
 			goto out;
 		}
 		if (NULL == (P = (uint8_t *)malloc(V.size))) {
-			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+			syslog(LOG_ERR, "pam_orca: malloc() failed: %s", strerror(errno));
 			goto out;
 		}
 		memcpy(P, V.data, V.size);
@@ -417,7 +438,7 @@ find_counter(const char *path,
 		memcpy(&timestamp_offset, V.data, sizeof(timestamp_offset));
 
 		if (0 != rfc6287_timestamp(&ocra, &T)) {
-			syslog(LOG_ERR, "rfc6287_timestamp() failed: %s",
+			syslog(LOG_ERR, "pam_orca: rfc6287_timestamp() failed: %s",
 			    rfc6287_err(r));
 			goto out;
 		}
@@ -449,7 +470,7 @@ find_counter(const char *path,
 			V.data = &C;
 			V.size = sizeof(uint64_t);
 			if (0 != config_db_put(db, &K, &V)) {
-				syslog(LOG_ERR, "db->put() failed for %s: %s",
+				syslog(LOG_ERR, "pam_orca: db->put() failed for %s: %s",
 				    (const char *)(K.data),
 				    strerror(errno));
 				goto out;
@@ -459,7 +480,7 @@ find_counter(const char *path,
 	}
 out:
 	if (0 != config_db_close(db)) {
-		syslog(LOG_ERR, "db->close() failed: %s", strerror(errno));
+		syslog(LOG_ERR, "pam_orca: db->close() failed: %s", strerror(errno));
 	}
 	free(suite_string);
 	free(key);

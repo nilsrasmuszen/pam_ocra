@@ -52,7 +52,7 @@ token.
 
 
 Advanced Use
-------------
+============
 
     $ ocra_tool sync -f ~foobar/.ocra \
               -c 12345678 -r 000000 -v 111111
@@ -62,8 +62,9 @@ will sync the counter in the ocra db file ".ocra" in the home directory of user
 12345678 until the response 000000 is found and the following response 111111
 validates.
 
+
 Kill Pin
-~~~~~~~~
+--------
 
 It is possible to set a kill pin that invalidates the stored key in the ocra db
 file when a response is generated with that pin. The kill pin is optional. When
@@ -81,8 +82,9 @@ Sets the kill pin to 4321.
 When a kill pin is entered, the key has to be restored on the system in order
 to reuse the token.
 
+
 PAM Options
-~~~~~~~~~~~
+-----------
 
 If you add arguments to the line in the PAM config, it is possible to change
 the appearance of the challenge.
@@ -98,17 +100,29 @@ Available format strings are:
  * %_: A literal space
  * %%: A literal percent sign
 
+LDAP Datasource
+---------------
+
+If you compile ocra_pam with ``--enable-ldap``, a ldap directory can be used
+to fetch and store the data instead of the local BerkleyDB file. This requires
+to configure the directory to support the pam-ocra.schema for the active users.
+Review the res/etc/openldap infos.
+When pam_ocra is build with ldap support, it drops the BerkleyDB support which
+results in a slightly different behavior of the ocra_tool. Instead of a file it
+has a optional user parameter that (when run as root) is able to access the
+values stored in the directory for the given username.
+
 
 Two Factor Authentication
-~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------
 
 Use the OCRA token to secure services is done by adding the pam_ocra.so to
 the associated /etc/pam.d configuration. The following examples enable 2FA for
 OpenSSH and Sudo.
 
 
-net-misc/openssh
-++++++++++++++++
+### net-misc/openssh
+
 
 To configure the *OpenSSH* service to use the OCRA token as a second factor,
 remove the pam_unix *auth* method from /etc/pam.d/sshd (or its includes) and
@@ -120,8 +134,7 @@ set to *Yes* and allow publickey,keyboard-interactive:pam as
     AuthenticationMethods publickey,keyboard-interactive:pam
 
 
-app-admin/sudo
-++++++++++++++
+### app-admin/sudo
 
 If for /etc/pam.d/sudo has the line
 
@@ -132,15 +145,14 @@ token.
 
 
 OTP usage
-~~~~~~~~~
+---------
 
 Use the OCRA token to secure systems by not setting any passwords for users but
 force them to use the token to authenticate. The following examples enable OTP
 for OpenSSH and Sudo
 
 
-net-misc/openssh
-++++++++++++++++
+### net-misc/openssh
 
 To configure the *OpenSSH* service to use only the OCRA token, remove the *auth*
 pam_unix method from /etc/pam.d/sshd and change the /etc/ssh/sshd_config to have
@@ -151,15 +163,13 @@ the *ChallengeResponseAuthentication* set to *Yes* and disallow other
     AuthenticationMethods keyboard-interactive:pam
 
 
-app-admin/sudo
-++++++++++++++
+### app-admin/sudo
 
 To configure a server with sudo and no dedicated passwords, for the users,
 remove the pam_unix auth method from /etc/pam.d/sudo.
 
 
-x11-misc/xscreensaver
-+++++++++++++++++++++
+### x11-misc/xscreensaver
 
 To configure a terminal to request the OCRA challenge for a screen locked with
 xscreensaver, add the following line to /etc/pam.d/xscreensaver:
@@ -168,7 +178,7 @@ xscreensaver, add the following line to /etc/pam.d/xscreensaver:
 
 
 Untested Services
-~~~~~~~~~~~~~~~~~
+-----------------
 
 PAM can be used for authentication for many services. Sometimes the service
 needs some activation to use PAM (like OpenSSH) or to build special modules
@@ -185,8 +195,7 @@ Should you deploy ocra_pam with one of the following services, please add
 the appropriate configuration as a pull request.
 
 
-Database Services
-+++++++++++++++++
+###  Database Services
 
 Avoid knowledge of a password for administration of services.
 Single Factor
@@ -196,8 +205,7 @@ Single Factor
     dev-db/postgresql
 
 
-Communication Services
-++++++++++++++++++++++
+### Communication Services
 
 Add second factor for services.
 
@@ -213,8 +221,7 @@ Add second factor for services.
     www-servers/uwsgi
 
 
-Remote Login Services
-+++++++++++++++++++++
+### Remote Login Services
 
 Add second factor for services.
 
@@ -223,8 +230,7 @@ Add second factor for services.
     net-misc/tigervnc
 
 
-File Services
-+++++++++++++
+### File Services
 
     net-fs/samba
     net-ftp/ftpbase
@@ -234,8 +240,7 @@ File Services
     net-ftp/vsftpd
 
 
-Login Services
-++++++++++++++
+### Login Services
 
     -app-admin/sudo-
     lxde-base/lxdm
@@ -248,8 +253,7 @@ Login Services
     x11-misc/wdm
 
 
-Terminal Lock Services
-++++++++++++++++++++++
+### Terminal Lock Services
 
     gnome-extra/cinnamon-screensaver
     kde-plasma/kscreenlocker
@@ -259,15 +263,14 @@ Terminal Lock Services
     -x11-misc/xscreensaver-
 
 
-Desktop Keyring Services
-++++++++++++++++++++++++
+### Desktop Keyring Services
 
     gnome-base/gnome-keyring
     kde-plasma/kwallet-pam
 
 
 Not working Services
-~~~~~~~~~~~~~~~~~~~~
+--------------------
 
 There are various services that may not implement the PAM interface to display
 a custom login prompt. Those services are listed here.

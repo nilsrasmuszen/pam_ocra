@@ -25,27 +25,21 @@
  *
  */
 #pragma once
+#include "include/config.h"
 
-#include <db.h>
-
-
-#define DB_OPEN_FLAGS_RO DB_RDONLY
-#define DB_OPEN_FLAGS_RW 0
-#define DB_OPEN_FLAGS_CREATE DB_CREATE
-
-
-int
-config_db_get(DB * db, DBT * K, DBT * V);
-
-int
-config_db_put(DB * db, DBT * K, DBT * V);
-
-int
-config_db_close(DB * db);
-
-int
-config_db_open(DB ** db, int flags, const char *path, const int user_id,
-    const char *nodata, const char *fake_suite);
-
-int
-config_db_sync(DB * db);
+/* rebind_proc declaration for different ldap implementations */
+int rebind_proc(LDAP * ld,
+#if defined(LDAP_API_FEATURE_X_OPENLDAP) && (LDAP_API_VERSION > 2000)
+#if LDAP_SET_REBIND_PROC_ARGS == 3
+    LDAP_CONST char *url, ber_tag_t request, ber_int_t msgid, void *arg
+#else /* LDAP_SET_REBIND_PROC_ARGS == 3 */
+    LDAP_CONST char *url, int request, ber_int_t msgid
+#endif /* else LDAP_SET_REBIND_PROC_ARGS == 3 */
+#else /* (LDAP_API_FEATURE_X_OPENLDAP) && (LDAP_API_VERSION > 2000) */
+#if LDAP_SET_REBIND_PROC_ARGS == 3
+    char **whop, char **credp, int *methodp, int freeit, void *arg
+#else /* LDAP_SET_REBIND_PROC_ARGS == 3 */
+    char **whop, char **credp, int *methodp, int freeit
+#endif /* else LDAP_SET_REBIND_PROC_ARGS == 3 */
+#endif /* else (LDAP_API_FEATURE_X_OPENLDAP) && (LDAP_API_VERSION > 2000) */
+);

@@ -25,27 +25,16 @@
  *
  */
 #pragma once
+#include "include/config.h"
 
-#include <db.h>
 
-
-#define DB_OPEN_FLAGS_RO DB_RDONLY
-#define DB_OPEN_FLAGS_RW 0
-#define DB_OPEN_FLAGS_CREATE DB_CREATE
-
+/*
+ * Value access methods
+ */
+int
+get_string_value(ldap_session_t * session, LDAPMessage * ldap_message,
+    const char * attribute, char ** value);
 
 int
-config_db_get(DB * db, DBT * K, DBT * V);
-
-int
-config_db_put(DB * db, DBT * K, DBT * V);
-
-int
-config_db_close(DB * db);
-
-int
-config_db_open(DB ** db, int flags, const char *path, const int user_id,
-    const char *nodata, const char *fake_suite);
-
-int
-config_db_sync(DB * db);
+set_string_value(ldap_session_t * session,
+    const char * attribute, const char * value);

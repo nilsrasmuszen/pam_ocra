@@ -25,20 +25,18 @@
  *
  */
 
+#define _GNU_SOURCE /* asprintf */
 #include <sys/types.h>
 #include <pwd.h>
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <syslog.h>
 #include <err.h>
 #include <errno.h>
 #include <sysexits.h>
-
-#include <security/pam_appl.h>
-
-#include <openssl/evp.h>
 
 #include <db_storage.h>
 
@@ -69,10 +67,8 @@ int
 config_db_open(DB ** db, int flags, const char *path, const int user_id,
     const char *nodata, const char *fake_suite)
 {
-	int r = 0;
 	struct passwd *pwd = NULL;
-	char *p1, *p2;
-	char *ep = NULL;
+	char *p1;
 
 	if (0 != db_create(db, NULL, 0)) {
 		syslog(LOG_ERR, "db_create failed: %s", strerror(errno));
@@ -106,8 +102,10 @@ config_db_open(DB ** db, int flags, const char *path, const int user_id,
 		syslog(LOG_ERR, "Open configuration for user path (%s) failed. %s",
 		    p1, strerror(errno));
 		(*db)->close(*db, 0);
+		free(p1);
 		return 1;
 	}
+	free(p1);
 	return 0;
 }
 

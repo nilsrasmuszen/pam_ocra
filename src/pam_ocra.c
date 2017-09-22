@@ -41,10 +41,6 @@
 #define PAM_EXTERN
 #endif
 
-#ifndef _OPENPAM
-static char password_prompt[] = "Password:";
-#endif
-
 #define LOG_NAME "pam_ocra"
 #define MODULE_NAME "pam_ocra"
 
@@ -122,9 +118,6 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	char fmt[512];
 #ifndef _OPENPAM
 	struct pam_conv *conv;
-	struct pam_message msg;
-	const struct pam_message *msgp;
-	struct pam_response *resp;
 	int pam_err;
 #endif
 	(void)flags;
@@ -141,9 +134,6 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	if (pam_err != PAM_SUCCESS) {
 		return (PAM_SYSTEM_ERR);
 	}
-	msg.msg_style = PAM_PROMPT_ECHO_OFF;
-	msg.msg = password_prompt;
-	msgp = &msg;
 	for (argi = 0; argi < argc; argi++) {
 		if (strlen(argv[argi]) < 6) {
 			continue;
@@ -163,7 +153,7 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 				cpad = PROMPT_ACCESSIBLE_PAD;
 			}
 		} else {
-			syslog(LOG_ERR, "Unknown option", argv[argi]);
+			syslog(LOG_ERR, "Unknown option: %s", argv[argi]);
 		}
 	}
 #else
@@ -174,7 +164,7 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
 	rmsg = openpam_get_option(pamh, "rmsg");
 	cpad_s = openpam_get_option(pamh, "cpad");
 	if (NULL != cpad_s) {
-		cpad = strtol(argv[argi] + 5, &ep, 10);
+		cpad = strtol(cpad_s, &ep, 10);
 		if (NULL == ep) {
 			cpad = PROMPT_ACCESSIBLE_PAD;
 		}

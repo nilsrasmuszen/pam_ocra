@@ -13,3 +13,9 @@ libpam_ocra_includedir='${includedir}/pam_ocra'
 
 AC_SUBST([pkgconfigdir])
 AC_SUBST([libpam_ocra_includedir])
+
+AC_DEFINE([USE_LDAP], ["no"], [Enable LDAP Support])
+AC_DEFINE([GETHOSTBYNAME_R_ARGS], [], [Description])
+AC_DEFINE([LDAP_SET_REBIND_PROC_ARGS], [], [Description])
+AC_DEFINE([PAM_LDAP_PATH_CONF], ["/etc/ldap.conf"], [Description])
+AC_DEFINE([PAM_LDAP_PATH_ROOTPASSWD], ["/etc/ldap.secret"], [Description])

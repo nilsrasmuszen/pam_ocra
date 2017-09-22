@@ -26,7 +26,7 @@
  */
 
 #include <sys/types.h>
-#ifdef bsd
+#ifdef __FreeBSD__
 #include <sys/endian.h>
 #else
 #include <endian.h>

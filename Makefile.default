@@ -5,8 +5,8 @@
 # should not be in the git repository
 
 PLATFORM ?= $(shell uname -s)-$(shell uname -m)
-CFLAGS=-O2 -g3 -Wall -fPIC
-CXXFLAGS=-O2 -g3 -Wall -fPIC
+CFLAGS=-O2 -g3 -Wall -fPIC -Wall
+CXXFLAGS=-O2 -g3 -Wall -fPIC -Wall
 LDFLAGS=
 PREFIX ?= /usr/local
 
@@ -23,7 +23,12 @@ all check clean dist distclean install uninstall: Makefile
 	$(MAKE) $@
 
 Makefile config.status newconf: Makefile.default configure
-	PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" CXXFLAGS="$(CXXFLAGS)" LDFLAGS="$(LDFLAGS)" ./configure \
+	PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" \
+	    CXXFLAGS="$(CXXFLAGS)" \
+	    CFLAGS="$(CFLAGS)" \
+	    LDFLAGS="$(LDFLAGS)" \
+	    ./configure \
+	    --enable-ldap \
 	    --prefix=$(PREFIX)
 
 clean_autotools:
@@ -34,6 +39,9 @@ clean_autotools:
 	rm config.status || true
 	rm config.transform || true
 	rm libtool || true
+	rm rfc6287_test || true
+	rm pam_ocra.pc || true
+	rm ocra_tool || true
 	find . -type d | grep .deps | xargs rm -r || true
 	find . -type d | grep .libs | xargs rm -r || true
 	find . | grep '/Makefile$$' | xargs rm || true
@@ -42,6 +50,21 @@ clean_autotools:
 	find . | grep '\.lo$$' | xargs rm || true
 	find . | grep '\.o$$' | xargs rm || true
 	find . | grep '\.dirstamp' | xargs rm || true
+	find . | grep 'stamp-h1' | xargs rm || true
+	rm include/config.h || true
+	rm include/config.h.in || true
+	rm include/config.h.in~ || true
+	rm autotools/compile || true
+	rm autotools/config.* || true
+	rm autotools/depcomp || true
+	rm autotools/ltmain.sh || true
+	rm autotools/install-sh || true
+	rm autotools/missing || true
+	rm autotools/m4/libtool.m4 || true
+	rm autotools/m4/ltoptions.m4 || true
+	rm autotools/m4/ltsugar.m4 || true
+	rm autotools/m4/ltversion.m4 || true
+	rm autotools/m4/lt~obsolete.m4 || true
 
 configure: configure.ac Makefile.am autotools/Makefile.am autotools/common.ac
 	aclocal

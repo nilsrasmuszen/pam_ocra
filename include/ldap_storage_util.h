@@ -25,27 +25,13 @@
  *
  */
 #pragma once
-
-#include <db.h>
-
-
-#define DB_OPEN_FLAGS_RO DB_RDONLY
-#define DB_OPEN_FLAGS_RW 0
-#define DB_OPEN_FLAGS_CREATE DB_CREATE
-
+#include "include/config.h"
 
 int
-config_db_get(DB * db, DBT * K, DBT * V);
+escape_string (const char * input, char * out, size_t outlen);
 
+#ifndef HAVE_LDAP_GET_LDERRNO
 int
-config_db_put(DB * db, DBT * K, DBT * V);
+ldap_get_lderrno(LDAP * ld, char ** matcheddnp, char ** errmsgp);
+#endif
 
-int
-config_db_close(DB * db);
-
-int
-config_db_open(DB ** db, int flags, const char *path, const int user_id,
-    const char *nodata, const char *fake_suite);
-
-int
-config_db_sync(DB * db);
