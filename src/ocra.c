@@ -80,35 +80,37 @@ challenge(const char *path, const char *user_name, char **questions,
 
 	errno = 0;
 	if (NULL == (pwd = getpwnam(user_name))) {
-	    syslog(LOG_ERR, "Challenge failure getting user_id: %s", strerror(errno));
-	    return PAM_SERVICE_ERR;
+		syslog(LOG_ERR, "Challenge failure getting user_id: %s",
+		    strerror(errno));
+		return PAM_SERVICE_ERR;
 	}
 	user_id = pwd->pw_uid;
 
 
 	if (0 != config_db_open(&db, DB_OPEN_FLAGS_RO, path,
 	    user_id, nodata, fake_suite)) {
-		syslog(LOG_ERR, "Configuration for user \"%s\" cannot be opened.", user_name);
+		syslog(LOG_ERR, "Configuration for user \"%s\" cannot be opened.",
+		    user_name);
+		/* Handle file open errors */
+		if (NULL != path) {
+			if (NULL != fake_suite) {
+				/* Indicate that a fake challenge must be generated */
+				r = PAM_NO_MODULE_DATA;
+			} else if (NULL == nodata || strcmp(nodata, "fail") == 0) {
+				/* We know we want to fail, so log an error. */
+				syslog(LOG_ERR, "challenge dbopen(\"%s\", ...) failed: %s",
+				    path, strerror(errno));
+				r = PAM_AUTHINFO_UNAVAIL;
+			} else {
+				/* We will be changing the return code later */
+				r = PAM_AUTHINFO_UNAVAIL;
+			}
+			if (PAM_NO_MODULE_DATA == r ) {
+				r = fake_challenge(fake_suite, questions);
+			}
+			return r;
+		}
 		return PAM_SERVICE_ERR;
-	}
-	/* Handle file open errors */
-	if (NULL != path) {
-		if (NULL != fake_suite) {
-			/* Indicate that a fake challenge must be generated */
-			r = PAM_NO_MODULE_DATA;
-		} else if (NULL == nodata || strcmp(nodata, "fail") == 0) {
-			/* We know we want to fail, so log an error. */
-			syslog(LOG_ERR, "dbopen(\"%s\", ...) failed: %s", path,
-			    strerror(errno));
-			r = PAM_AUTHINFO_UNAVAIL;
-		} else {
-			/* We will be changing the return code later */
-			r = PAM_AUTHINFO_UNAVAIL;
-		}
-		if (PAM_NO_MODULE_DATA == r ) {
-			r = fake_challenge(fake_suite, questions);
-		}
-		return r;
 	}
 
 
