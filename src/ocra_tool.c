@@ -735,13 +735,15 @@ cmd_test(int argc, char **argv)
 		PROMPT_CHALLENGE, PROMPT_RESPONSE, PROMPT_ACCESSIBLE_PAD);
 
 	printf("Default prompt:\n\n%s", fmt);
-	fgets(response, sizeof(response), stdin);
-
-	ret = verify(fname, FAKE_USER, questions, response);
-	if (PAM_SUCCESS == ret) {
-		printf("Success.\n");
+	if (NULL != fgets(response, sizeof(response), stdin)) {
+		ret = verify(fname, FAKE_USER, questions, response);
+		if (PAM_SUCCESS == ret) {
+			printf("Success.\n");
+		} else {
+			printf("Failure.\n");
+		}
 	} else {
-		printf("Failure.\n");
+		printf("Failure reading from stdin.\n");
 	}
 }
 

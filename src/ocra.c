@@ -294,7 +294,8 @@ verify(const char *path, const char *user_name, const char *questions,
 			KEY(K, "C");
 			V.data = &next_counter;
 			V.size = sizeof(uint64_t);
-			syslog(LOG_USER, "Counter updated to %d.", next_counter);
+			syslog(LOG_USER, "Counter updated to %02x.",
+			    ((uint8_t)(next_counter)));
 			if (0 != config_db_put(db, &K, &V)) {
 				syslog(LOG_ERR, "db->put() failed for %s: %s",
 				    (const char *)(K.data),
