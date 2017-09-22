@@ -151,6 +151,8 @@ verify(const char *path, const char *user_name, const char *questions,
 	uint64_t C = 0;
 	uint8_t *P = NULL;
 	size_t P_l = 0;
+	uint8_t *KP = NULL;
+	size_t KP_l = 0;
 	uint64_t T = 0;
 	int counter_window = 0;
 	int timestamp_offset = 0;
@@ -228,6 +230,16 @@ verify(const char *path, const char *user_name, const char *questions,
 		}
 		memcpy(P, V.data, V.size);
 		P_l = V.size;
+		KEY(K, "kill_pin");
+		if (0 != config_db_get(db, &K, &V)) {
+			goto out;
+		}
+		if (NULL == (KP = (uint8_t *)malloc(V.size))) {
+			syslog(LOG_ERR, "malloc() failed: %s", strerror(errno));
+			goto out;
+		}
+		memcpy(KP, V.data, V.size);
+		KP_l = V.size;
 	}
 	if (ocra.flags & FL_T) {
 		KEY(K, "timestamp_offset");
@@ -239,6 +251,38 @@ verify(const char *path, const char *user_name, const char *questions,
 		if (0 != rfc6287_timestamp(&ocra, &T)) {
 			syslog(LOG_ERR, "rfc6287_timestamp() failed: %s",
 			    rfc6287_err(r));
+			goto out;
+		}
+	}
+	if (NULL != KP) {
+		/*
+		 * Kill pin check
+		 */
+		r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
+		    KP, KP_l, NULL, 0, T, response, counter_window, &next_counter,
+		    timestamp_offset);
+		if (RFC6287_SUCCESS == r) {
+			/* avoid timing detection */
+			r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
+			    P, P_l, NULL, 0, T, response, counter_window, &next_counter,
+			    timestamp_offset);
+			syslog(LOG_ERR, "Authentication Success for user %s with kill_pin",
+			    user_name);
+			ret = PAM_AUTH_ERR;
+
+			/* make key invalid for future uses */
+			KEY(K, "key");
+			// XXX random bytes, otherwise predictable?
+			key[0] = key[0] + 1;
+			V.data = &key;
+			V.size = key_l;
+			syslog(LOG_USER, "Key updated to invalid by kill pin.");
+			if (0 != config_db_put(db, &K, &V)) {
+				syslog(LOG_ERR, "db->put() failed for %s: %s",
+				    (const char *)(K.data),
+				    strerror(errno));
+				goto out;
+			}
 			goto out;
 		}
 	}

@@ -62,6 +62,24 @@ will sync the counter in the ocra db file ".ocra" in the home directory of user
 12345678 until the response 000000 is found and the following response 111111
 validates.
 
+Kill Pin
+~~~~~~~~
+
+It is possible to set a kill pin that invalidates the stored key in the ocra db
+file when a response is generated with that pin. The kill pin is optional. When
+this pin used to create the response, the stored key is reset. The mechanism
+does not change the authentication time so it is not visible from outside that
+the token has been rendered useless.
+
+    $ ocra_tool init -f ~foobar/.ocra \
+              -s OCRA-1:HOTP-SHA1-6:C-QN08-PSHA1 \
+              -k 00112233445566778899aabbccddeeff00112233 \
+              -c 10 -w 50 -p 1234 -q 4321
+
+Sets the kill pin to 4321.
+
+When a kill pin is entered, the key has to be restored on the system in order
+to reuse the token.
 
 PAM Options
 ~~~~~~~~~~~
@@ -261,14 +279,6 @@ request to update this list.
 
 Todo
 ----
-
-Kill Pin
-~~~~~~~~
-
-Optionally provide a additional pin to ocra_tool init. When this pin used to
-create the response, the stored key is reset and/or the counter is set outside
-of the defined window. The mechanism must not change the authentication time so
-it is not visible from outside that the token is useless.
 
 
 Changelog

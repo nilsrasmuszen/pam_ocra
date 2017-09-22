@@ -143,6 +143,7 @@ usage(void)
 	fprintf(stderr,
 	    "usage: ocra_tool init -f credential_file -k key -s suite_string\n"
 	    "                     [-c counter] [-p pin | -P pin_hash]\n"
+	    "                     [-q kill_pin | -Q kill_pin_hash]\n"
 	    "                     [-w counter_window] [-t timestamp_offset]\n"
 	    "       ocra_tool info -f credential_file\n"
 	    "       ocra_tool sync_counter -f credential_file\n"
@@ -248,6 +249,23 @@ cmd_info(int argc, char **argv)
 			printf("%02x", ((uint8_t *)(V.data))[i]);
 		}
 		printf("\n");
+
+		KEY(K, "kill_pin");
+		if (0 == (ret = config_db_get(db, &K, &V))) {
+			if (V.size == 0) {
+				printf("kill_pin_hash:\tNot Set");
+			} else {
+				if (mdlen(ocra.P_alg) != V.size) {
+					errx(EX_SOFTWARE,
+					    "kill pin hash size does not match suite!");
+				}
+				printf("kill_pin_hash:\t0x");
+				for (i = 0; V.size > i; i++) {
+					printf("%02x", ((uint8_t *)(V.data))[i]);
+				}
+			}
+		}
+		printf("\n");
 	}
 	if (ocra.flags & FL_T) {
 		int TO;
@@ -267,8 +285,10 @@ cmd_info(int argc, char **argv)
 
 static void
 test_input(const ocra_suite * ocra, const char *suite_string,
-    const uint8_t *key, size_t key_l, uint64_t C, const uint8_t *P,
-    size_t P_l, int counter_window, int timestamp_offset)
+    const uint8_t *key, size_t key_l, uint64_t C,
+    const uint8_t *P, size_t P_l,
+    const uint8_t *KP, size_t KP_l,
+    int counter_window, int timestamp_offset)
 {
 	int r;
 	uint64_t T;
@@ -297,6 +317,20 @@ test_input(const ocra_suite * ocra, const char *suite_string,
 		errx(EX_SOFTWARE, "rfc6287_verify() failed: %s",
 		    rfc6287_err(r));
 	}
+	if (NULL != KP) {
+		if (RFC6287_SUCCESS != (r = rfc6287_ocra(ocra, suite_string,
+		    key, key_l, C, questions, KP, KP_l, NULL, 0, T,
+		    &response))) {
+			errx(EX_SOFTWARE, "rfc6287_ocra() failed: %s", rfc6287_err(r));
+		}
+
+		if (RFC6287_SUCCESS != (r = rfc6287_verify(ocra, suite_string,
+		    key, key_l, C, questions, KP, KP_l, NULL, 0, T, response,
+		    counter_window, &next_counter, timestamp_offset))) {
+			errx(EX_SOFTWARE, "rfc6287_verify() failed: %s",
+			    rfc6287_err(r));
+		}
+	}
 
 	free(response);
 	free(questions);
@@ -304,8 +338,9 @@ test_input(const ocra_suite * ocra, const char *suite_string,
 
 static void
 write_db(const char *fname, const char *suite_string,
-    const uint8_t *key, size_t key_l, uint64_t C, const uint8_t *P,
-    size_t P_l, int counter_window, int timestamp_offset)
+    const uint8_t *key, size_t key_l, uint64_t C, const uint8_t *P, size_t P_l,
+    const uint8_t *KP, size_t KP_l,
+    int counter_window, int timestamp_offset)
 {
 	DB *db;
 	DBT K, V;
@@ -346,6 +381,12 @@ write_db(const char *fname, const char *suite_string,
 		err(EX_OSERR, "db->put() P failed");
 	}
 
+	KEY(K, "kill_pin");
+	VALUE(V, KP, KP_l);
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() kill_pin failed");
+	}
+
 	KEY(K, "counter_window");
 	VALUE(V, &counter_window, sizeof(counter_window));
 	if (0 != (config_db_put(db, &K, &V))) {
@@ -377,6 +418,8 @@ cmd_init(int argc, char **argv)
 	char *key_string = NULL;
 	char *pin_string = NULL;
 	char *pin_hash_string = NULL;
+	char *kill_pin_string = NULL;
+	char *kill_pin_hash_string = NULL;
 	char *counter_string = NULL;
 	char *counter_window_string = NULL;
 	char *timestamp_offset_string = NULL;
@@ -388,10 +431,12 @@ cmd_init(int argc, char **argv)
 
 	uint8_t *P = NULL;
 	size_t P_l = 0;
+	uint8_t *KP = NULL;
+	size_t KP_l = 0;
 	uint8_t *key = NULL;
 	size_t key_l = 0;
 
-	while (-1 != (ch = getopt(argc, argv, "f:s:k:p:P:c:w:t:"))) {
+	while (-1 != (ch = getopt(argc, argv, "f:s:k:p:P:q:Q:c:w:t:"))) {
 		switch (ch) {
 		case 'f':
 			if (NULL != fname) {
@@ -428,6 +473,18 @@ cmd_init(int argc, char **argv)
 				usage();
 			}
 			pin_hash_string = optarg;
+			break;
+		case 'q':
+			if (NULL != kill_pin_string) {
+				usage();
+			}
+			kill_pin_string = optarg;
+			break;
+		case 'Q':
+			if (NULL != kill_pin_hash_string) {
+				usage();
+			}
+			kill_pin_hash_string = optarg;
 			break;
 		case 'w':
 			if (NULL != counter_window_string) {
@@ -505,22 +562,32 @@ cmd_init(int argc, char **argv)
 	if (ocra.flags & FL_P) {
 		if (NULL != pin_string && NULL != pin_hash_string) {
 			errx(EX_CONFIG, "exactly one of -p <pin> and -P "
-			    "<pinhash> must be set");
+			    "<pin_hash> must be set");
 		}
 		if (NULL != pin_string) {
 			pin_hash(&ocra, pin_string, &P, &P_l);
 		} else if (NULL != pin_hash_string) {
 			P_l = mdlen(ocra.P_alg);
 			if (0 != from_hex(pin_hash_string, &P, P_l)) {
-				errx(EX_CONFIG, "invalid pinhash");
+				errx(EX_CONFIG, "invalid pin_hash");
 			}
 		} else {
 			errx(EX_CONFIG, "suite requires pin parameter "
-			    "(-p <pin> or -P <pinhash> missing)");
+			    "(-p <pin> or -P <pin_hash> missing)");
 		}
-	} else if (NULL != pin_string || NULL != pin_hash_string) {
+		if (NULL != kill_pin_string) {
+			pin_hash(&ocra, kill_pin_string, &KP, &KP_l);
+		} else if (NULL != pin_hash_string) {
+			KP_l = mdlen(ocra.P_alg);
+			if (0 != from_hex(pin_hash_string, &KP, KP_l)) {
+				errx(EX_CONFIG, "invalid kill_pin_hash");
+			}
+		}
+	} else if (NULL != pin_string || NULL != pin_hash_string ||
+	    NULL != kill_pin_string || NULL != kill_pin_hash_string) {
 		errx(EX_CONFIG, "suite does not require pin parameter"
-		    " (-p <pin> and -P <pinhash> must not be set)");
+		    " (-p <pin>, -P <pin_hash>, -q <kill_pin> or -Q <kill_pin_hash>"
+		    " must not be set)");
 	}
 
 	key_l = mdlen(ocra.hotp_alg);
@@ -528,11 +595,11 @@ cmd_init(int argc, char **argv)
 		errx(EX_CONFIG, "invalid key");
 	}
 
-	test_input(&ocra, suite_string, key, key_l, C, P, P_l,
+	test_input(&ocra, suite_string, key, key_l, C, P, P_l, KP, KP_l,
 	    counter_window, timestamp_offset);
 
 	unlink(fname);
-	write_db(fname, suite_string, key, key_l, C, P, P_l,
+	write_db(fname, suite_string, key, key_l, C, P, P_l, KP, KP_l,
 	    counter_window, timestamp_offset);
 
 }
