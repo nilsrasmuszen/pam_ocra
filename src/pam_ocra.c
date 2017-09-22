@@ -29,13 +29,13 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <syslog.h>
-#include <time.h>
 #include <string.h>
 
 #include <security/pam_modules.h>
 #include <security/pam_appl.h>
 
-#include "ocra.h"
+#include <ocra.h>
+#include <pam_prompt.h>
 
 #ifndef PAM_EXTERN
 #define PAM_EXTERN
@@ -44,19 +44,6 @@
 #ifndef _OPENPAM
 static char password_prompt[] = "Password:";
 #endif
-/*
- * Challenge Prompt
- * %a: Accessible OCRA challenge (separate every two bytes)
- * %c: OCRA challenge
- * %u: UTC time
- * %l: Local time
- * %_: A literal space
- * %%: A literal percent sign
- * Not printing OCRA to avoid information leak
- */
-#define PROMPT_CHALLENGE "Challenge: %a (%u)"
-#define PROMPT_RESPONSE "Response: "
-#define PROMPT_ACCESSIBLE_PAD 4
 
 #define LOG_NAME "pam_ocra"
 #define MODULE_NAME "pam_ocra"
@@ -88,134 +75,6 @@ adjust_return(const char *nodata, int ret)
 	}
 	return ret;
 }
-
-static void
-fmt_prompt(char *mbuf, int msize, const char *questions, const char *pmsg,
-    int cpad)
-{
-	char *mptr = mbuf;
-	const char *pptr = pmsg;
-	int mrsize = 0;
-	int qlen = strlen(questions);
-	int qpos = 0;
-	time_t epoch_seconds;
-	struct tm *now;
-
-	msize--;			/* Ensure we always have room for
-					 * trailing '\0' */
-	if (NULL != pmsg) {
-		while ((mrsize < msize) && *pptr != '\0') {
-			/* Copy over the first part of the string */
-			while ((mrsize < msize) && *pptr != '\0') {
-				if (*pptr != '%') {
-					*mptr++ = *pptr++;
-					mrsize++;
-				} else {
-					pptr++;
-					break;
-				}
-			}
-
-			/*
-			 * Handle the conversion character.  If not understood,
-			 * the '%' will be quitely dropped.
-			 */
-			switch (*pptr) {
-			case '%':	/* Literal '%' */
-				*mptr++ = '%';
-				mrsize++;
-				pptr++;
-				break;
-
-			case '_':	/* Literal ' ' */
-				*mptr++ = ' ';
-				mrsize++;
-				pptr++;
-				break;
-
-			case 'u':	/* UTC time */
-				time(&epoch_seconds);
-				now = gmtime(&epoch_seconds);
-				strftime(mptr, msize - mrsize,
-				    "%Y-%m-%dT%H:%M:%SZ", now);
-				mrsize = strlen(mbuf);
-				mptr = &mbuf[mrsize];
-				pptr++;
-				break;
-
-			case 'l':	/* Local time */
-				time(&epoch_seconds);
-				now = localtime(&epoch_seconds);
-				strftime(mptr, msize - mrsize,
-				    "%Y-%m-%dT%H:%M:%S%z %Z", now);
-				mrsize = strlen(mbuf);
-				mptr = &mbuf[mrsize];
-				pptr++;
-				break;
-
-			case 'c':	/* Challenge question */
-				snprintf(mptr, msize - mrsize,
-				    "%s", questions);
-				mrsize = strlen(mbuf);
-				mptr = &mbuf[mrsize];
-				pptr++;
-				break;
-
-			case 'a':	/* Accessible Challenge question */
-				for (qpos = 0; qpos < strlen(questions); qpos++) {
-					snprintf(mptr, msize - mrsize,
-					    "%c", questions[qpos]);
-					mrsize = strlen(mbuf);
-					mptr = &mbuf[mrsize];
-					if (qpos == qlen - 1) {
-						/* Avoid trailing blank */
-						continue;
-					}
-					if (cpad <= 0) {
-						continue;
-					}
-					if ((qpos + 1) % cpad == 0) {
-						snprintf(mptr, msize - mrsize, " ");
-						mrsize = strlen(mbuf);
-						mptr = &mbuf[mrsize];
-					}
-				}
-				pptr++;
-				break;
-			}
-		}
-
-	}
-	/* Terminate the prompt string */
-	*mptr = '\0';
-}
-
-static void
-make_prompt(char *buf, int bsize, const char *questions,
-    const char *cmsg, const char *rmsg, int cpad)
-{
-	char cbuf[512];
-	char rbuf[512];
-
-	/* Create the default prompt strings, if necessary */
-	if (NULL == cmsg && NULL == rmsg) {
-		cmsg = PROMPT_CHALLENGE;
-		rmsg = PROMPT_RESPONSE;
-	}
-	/* Generate each prompt */
-	fmt_prompt(cbuf, sizeof(cbuf), questions, cmsg, cpad);
-	fmt_prompt(rbuf, sizeof(rbuf), questions, rmsg, cpad);
-
-	/* Concatinate them to the final prompt */
-	if (NULL != cmsg && NULL != rmsg) {
-		snprintf(buf, bsize, "%s\n%s", cbuf, rbuf);
-	} else if (NULL != cmsg) {
-		snprintf(buf, bsize, "%s\n", cbuf);
-	} else {
-		snprintf(buf, bsize, "%s", rbuf);
-	}
-}
-
 
 static int
 get_response(pam_handle_t *pamh, char *prompt, char **response)

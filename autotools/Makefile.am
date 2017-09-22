@@ -6,6 +6,7 @@ libpam_ocra_la_LIBADD   = $(pam_ocra_LIBS)
 libpam_ocra_la_DEPENDENCIES = $(pam_ocra_DEPENDS)
 libpam_ocra_la_SOURCES = src/ocra.c
 libpam_ocra_la_SOURCES += src/pam_ocra.c
+libpam_ocra_la_SOURCES += src/pam_prompt.c
 libpam_ocra_la_SOURCES += src/db_storage.c
 libpam_ocra_la_SOURCES += src/rfc6287.c
 libpam_ocra_include_HEADERS = include/rfc6287.h
