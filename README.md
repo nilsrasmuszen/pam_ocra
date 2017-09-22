@@ -54,7 +54,7 @@ token.
 Advanced Use
 ------------
 
-    $ ocra_tool sync_counter -f ~foobar/.ocra \
+    $ ocra_tool sync -f ~foobar/.ocra \
               -c 12345678 -r 000000 -v 111111
 
 will sync the counter in the ocra db file ".ocra" in the home directory of user

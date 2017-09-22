@@ -146,7 +146,7 @@ usage(void)
 	    "                     [-q kill_pin | -Q kill_pin_hash]\n"
 	    "                     [-w counter_window] [-t timestamp_offset]\n"
 	    "       ocra_tool info -f credential_file\n"
-	    "       ocra_tool sync_counter -f credential_file\n"
+	    "       ocra_tool sync -f credential_file\n"
 	    "                 -c challenge\n"
 	    "                 -r response -v second_response\n"
 	    "       ocra_tool test -f credential_file\n");
@@ -755,7 +755,7 @@ main(int argc, char **argv)
 		cmd_init(argc - 1, argv + 1);
 	} else if (0 == strcmp(argv[1], "info")) {
 		cmd_info(argc - 1, argv + 1);
-	} else if (0 == strcmp(argv[1], "sync_counter")) {
+	} else if (0 == strcmp(argv[1], "sync")) {
 		cmd_sync_counter(argc - 1, argv + 1);
 	} else if (0 == strcmp(argv[1], "test")) {
 		cmd_test(argc - 1, argv + 1);

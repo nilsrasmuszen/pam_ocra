@@ -50,6 +50,16 @@
 .Op Fl q Ar kill_pin | Fl Q Ar kill_pin_hash
 .Op Fl w Ar counter_window
 .Op Fl t Ar timestamp_offset
+.Nm
+.Cm sync
+.Fl f
+.Ar credential_file
+.Fl c
+.Ar challenge
+.Fl r
+.Ar response
+.Fl v
+.Ar second_response
 .Sh DESCRIPTION
 The
 .Nm
@@ -121,6 +131,24 @@ will make while verifying a response. The verify process will start at
 and end at (current_timestamp +
 .Ar timestamp_offset ) .
 This parameter is optional.
+.El
+.El
+.Bl -tag -width ".Cm sync"
+.It Cm sync
+Synchronize the counter with two responses from the OTP device. Based on a
+user selectable challenge and two subsequent responses it is possible to brute
+force the counter in the OTP device.
+When the counter is found, the database is updated. The counter is searched from
+0 to UINT_MAX.
+.Bl -tag -width ".FL f"
+.It Fl f Ar credential_file
+the OCRA credential file.
+.It Fl c Ar challenge
+Challenge entered in the OTP device.
+.It Fl r Ar response
+First response for the given challenge.
+.It Fl v Ar second response
+Second response for the given challenge.
 .El
 .El
 .Sh EXAMPLE
