@@ -163,8 +163,8 @@ verify(const char *path, const char *user_name, const char *questions,
 
 	errno = 0;
 	if (NULL == (pwd = getpwnam(user_name))) {
-	    syslog(LOG_ERR, "verify failure getting user_id: %s", strerror(errno));
-	    return PAM_SERVICE_ERR;
+		syslog(LOG_ERR, "verify failure getting user_id: %s", strerror(errno));
+		return PAM_SERVICE_ERR;
 	}
 	user_id = pwd->pw_uid;
 
@@ -258,7 +258,8 @@ verify(const char *path, const char *user_name, const char *questions,
 		}
 		ret = PAM_SUCCESS;
 	} else if (RFC6287_VERIFY_FAILED == r){
-		syslog(LOG_ERR, "Authentication Error for user %s with challenge %s and response %s", user_name, questions, response);
+		syslog(LOG_ERR, "Authentication Error for user %s with challenge %s "
+		    "and response %s", user_name, questions, response);
 		ret = PAM_AUTH_ERR;
 	} else {
 		syslog(LOG_ERR, "rfc6287_challenge() failed: %s",

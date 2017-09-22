@@ -78,13 +78,14 @@ config_db_open(DB ** db, int flags, const char *path, const int user_id,
 		syslog(LOG_ERR, "db_create failed: %s", strerror(errno));
 		return 1;
 	}
-	
+
 	if (path != NULL) {
 		/**
 		 * Open by path.
 		 */
 		if (0 != ((*db)->open(*db, NULL, path, NULL, DB_BTREE, flags, 0600))) {
-			syslog(LOG_ERR, "Open configuration from path (%s) failed. %s", path, strerror(errno));
+			syslog(LOG_ERR, "Open configuration from path (%s) failed. %s",
+			    path, strerror(errno));
 			(*db)->close(*db, 0);
 			return 1;
 		}
@@ -102,7 +103,8 @@ config_db_open(DB ** db, int flags, const char *path, const int user_id,
 
 	asprintf(&p1, "%s/.ocra", pwd->pw_dir);
 	if (0 != ((*db)->open(*db, NULL, p1, NULL, DB_BTREE, flags, 0600))) {
-		syslog(LOG_ERR, "Open configuration for user path (%s) failed. %s", p1, strerror(errno));
+		syslog(LOG_ERR, "Open configuration for user path (%s) failed. %s",
+		    p1, strerror(errno));
 		(*db)->close(*db, 0);
 		return 1;
 	}

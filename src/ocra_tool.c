@@ -142,7 +142,9 @@ usage(void)
 	    "                     [-c counter] [-p pin | -P pin_hash]\n"
 	    "                     [-w counter_window] [-t timestamp_offset]\n"
 	    "       ocra_tool info -f credential_file\n"
-	    "       ocra_tool sync_counter -f credential_file -c challenge -r response -v second_response\n");
+	    "       ocra_tool sync_counter -f credential_file\n"
+	    "                 -c challenge\n"
+	    "                 -r response -v second_response\n");
 	exit(-1);
 }
 
