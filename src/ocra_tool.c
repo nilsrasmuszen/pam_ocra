@@ -44,6 +44,9 @@
 #include <rfc6287.h>
 #include <db_storage.h>
 #include <ocra.h>
+#include <pam_prompt.h>
+#include <security/pam_modules.h>
+
 #ifndef bsd
 #define ishexnumber isxdigit
 #endif
@@ -144,7 +147,8 @@ usage(void)
 	    "       ocra_tool info -f credential_file\n"
 	    "       ocra_tool sync_counter -f credential_file\n"
 	    "                 -c challenge\n"
-	    "                 -r response -v second_response\n");
+	    "                 -r response -v second_response\n"
+	    "       ocra_tool test -f credential_file\n");
 	exit(-1);
 }
 
@@ -609,6 +613,71 @@ cmd_sync_counter(int argc, char **argv)
 	printf("done\n");
 }
 
+static void
+cmd_test(int argc, char **argv)
+{
+	int ch, ret, qret, cpad;
+	uint32_t i;
+	char *fname = NULL;
+	char response[64];
+	char fmt[512];
+	char *questions;
+	char *cmsg;
+	char *rmsg;
+	const char* FAKE_USER = "root";  // this user must exist
+
+	ocra_suite ocra;
+
+	DB *db;
+	DBT K, V;
+
+	uint64_t C;
+	int CW;
+
+	int user_id = geteuid();
+
+	while (-1 != (ch = getopt(argc, argv, "f:"))) {
+		switch (ch) {
+		case 'f':
+			if (NULL != fname) {
+				usage();
+			}
+			fname = optarg;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	if ((0 != argc) ||
+	    (NULL == fname)) {
+		usage();
+	}
+
+	memset(&K, 0, sizeof(K));
+	memset(&V, 0, sizeof(V));
+
+	printf("Tail the syslog to see module output.\n");
+
+	qret = challenge(fname, FAKE_USER, &questions, NULL, NULL);
+	if (PAM_SUCCESS != qret && PAM_NO_MODULE_DATA != qret) {
+		printf("No challenge was generated.\n");
+		return;
+	}
+	make_prompt(fmt, sizeof(fmt), questions,
+		PROMPT_CHALLENGE, PROMPT_RESPONSE, PROMPT_ACCESSIBLE_PAD);
+
+	printf("Default prompt:\n\n%s", fmt);
+	fgets(response, sizeof(response), stdin);
+
+	ret = verify(fname, FAKE_USER, questions, response);
+	if (PAM_SUCCESS == ret) {
+		printf("Success.\n");
+	} else {
+		printf("Failure.\n");
+	}
+}
+
 int
 main(int argc, char **argv)
 {
@@ -621,6 +690,8 @@ main(int argc, char **argv)
 		cmd_info(argc - 1, argv + 1);
 	} else if (0 == strcmp(argv[1], "sync_counter")) {
 		cmd_sync_counter(argc - 1, argv + 1);
+	} else if (0 == strcmp(argv[1], "test")) {
+		cmd_test(argc - 1, argv + 1);
 	} else {
 		usage();
 	}
