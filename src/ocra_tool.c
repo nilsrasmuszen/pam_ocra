@@ -235,6 +235,7 @@ cmd_info(int argc, char **argv)
 		printf("counter_window: %d\n", CW);
 	}
 	if (ocra.flags & FL_P) {
+		int kill_pin_used = 0;
 		KEY(K, "P");
 		if (0 != (ret = config_db_get(db, &K, &V))) {
 			errx(EX_OSERR, "db->get() failed: %s",
@@ -266,6 +267,16 @@ cmd_info(int argc, char **argv)
 			}
 		}
 		printf("\n");
+
+		KEY(K, "kill_pin_used");
+		if (0 == (ret = config_db_get(db, &K, &V))) {
+			memcpy(&kill_pin_used, V.data, sizeof(kill_pin_used));
+		} else if (ret != 1) {
+			errx(EX_OSERR, "db->get() failed: %s", strerror(errno));
+		}
+
+		printf("kill pin used:\t%s\n",
+		    (ret == 1 || !kill_pin_used) ? "false" : "true");
 	}
 	if (ocra.flags & FL_T) {
 		int TO;
@@ -339,7 +350,7 @@ test_input(const ocra_suite * ocra, const char *suite_string,
 static void
 write_db(const char *fname, const char *suite_string,
     const uint8_t *key, size_t key_l, uint64_t C, const uint8_t *P, size_t P_l,
-    const uint8_t *KP, size_t KP_l,
+    const uint8_t *KP, size_t KP_l, int kill_pin_used,
     int counter_window, int timestamp_offset)
 {
 	DB *db;
@@ -387,6 +398,12 @@ write_db(const char *fname, const char *suite_string,
 		err(EX_OSERR, "db->put() kill_pin failed");
 	}
 
+	KEY(K, "kill_pin_used");
+	VALUE(V, &kill_pin_used, sizeof(kill_pin_used));
+	if (0 != (config_db_put(db, &K, &V))) {
+		err(EX_OSERR, "db->put() kill_pin failed");
+	}
+
 	KEY(K, "counter_window");
 	VALUE(V, &counter_window, sizeof(counter_window));
 	if (0 != (config_db_put(db, &K, &V))) {
@@ -428,6 +445,7 @@ cmd_init(int argc, char **argv)
 	uint64_t C = 0;
 	int timestamp_offset = 0;
 	int counter_window = 0;
+	int kill_pin_used = 0;
 
 	uint8_t *P = NULL;
 	size_t P_l = 0;
@@ -599,7 +617,8 @@ cmd_init(int argc, char **argv)
 	    counter_window, timestamp_offset);
 
 	unlink(fname);
-	write_db(fname, suite_string, key, key_l, C, P, P_l, KP, KP_l,
+	write_db(fname, suite_string, key, key_l, C, P, P_l,
+	    KP, KP_l, kill_pin_used,
 	    counter_window, timestamp_offset);
 
 }

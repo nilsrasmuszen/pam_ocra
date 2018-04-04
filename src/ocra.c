@@ -142,6 +142,7 @@ verify(const char *path, const char *user_name, const char *questions,
 {
 	int ret = PAM_SERVICE_ERR;
 	int r;
+	int kill_pin_used = 0;
 	DB *db = NULL;
 	DBT K, V;
 
@@ -230,6 +231,12 @@ verify(const char *path, const char *user_name, const char *questions,
 		}
 		memcpy(P, V.data, V.size);
 		P_l = V.size;
+		KEY(K, "kill_pin_used");
+		if (0 == (r = config_db_get(db, &K, &V))) {
+			memcpy(&kill_pin_used, V.data, sizeof(kill_pin_used));
+		} else if (r != 1) {
+			goto out;
+		}
 		KEY(K, "kill_pin");
 		if (0 != config_db_get(db, &K, &V)) {
 			goto out;
@@ -261,35 +268,29 @@ verify(const char *path, const char *user_name, const char *questions,
 		r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
 		    KP, KP_l, NULL, 0, T, response, counter_window, &next_counter,
 		    timestamp_offset);
-		if (RFC6287_SUCCESS == r) {
-			/* avoid timing detection */
-			r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
-			    P, P_l, NULL, 0, T, response, counter_window, &next_counter,
-			    timestamp_offset);
+		if (0 == kill_pin_used && RFC6287_SUCCESS == r) {
+			kill_pin_used = 1;
 			syslog(LOG_ERR, "Authentication Success for user %s with kill_pin",
 			    user_name);
-			ret = PAM_AUTH_ERR;
 
-			/* make key invalid for future uses */
-			KEY(K, "key");
-			// XXX random bytes, otherwise predictable?
-			key[0] = key[0] + 1;
-			V.data = &key;
-			V.size = key_l;
-			syslog(LOG_USER, "Key updated to invalid by kill pin.");
+			KEY(K, "kill_pin_used");
+			V.data = &kill_pin_used;
+			V.size = sizeof(kill_pin_used);
+
 			if (0 != config_db_put(db, &K, &V)) {
 				syslog(LOG_ERR, "db->put() failed for %s: %s",
 				    (const char *)(K.data),
 				    strerror(errno));
 				goto out;
 			}
-			goto out;
 		}
 	}
 	r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
 	    P, P_l, NULL, 0, T, response, counter_window, &next_counter,
 	    timestamp_offset);
-	if (RFC6287_SUCCESS == r) {
+	if (kill_pin_used) {
+		ret = PAM_AUTH_ERR;
+	} else if (RFC6287_SUCCESS == r) {
 		if (ocra.flags & FL_C) {
 			KEY(K, "C");
 			V.data = &next_counter;
@@ -319,6 +320,9 @@ out:
 	free(suite_string);
 	free(key);
 	free(P);
+	if (NULL != KP) {
+		free(KP);
+	}
 	return ret;
 }
 
