@@ -428,19 +428,28 @@ find_counter(const char *path,
 		r = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
 		    P, P_l, NULL, 0, T, response1, counter_window, &next_counter,
 		    timestamp_offset);
-		C = next_counter;
-		if (r != RFC6287_SUCCESS) {
+		if (r == RFC6287_VERIFY_FAILED) {
+			C += counter_window;
 			continue;
 		}
+		if (r != RFC6287_SUCCESS) {
+			printf("Aborting first response (out of memory or suite wrong)\n");
+			break;
+		}
 		printf("@0x%.16" PRIx64 ".", C);
+		C = next_counter;
 		rv = rfc6287_verify(&ocra, suite_string, key, key_l, C, questions,
 		    P, P_l, NULL, 0, T, response2, counter_window, &next_counter,
 		    timestamp_offset);
-		C = next_counter;
-		if (rv != RFC6287_SUCCESS) {
+		if (rv == RFC6287_VERIFY_FAILED) {
 			printf(" 2nd verify does not match.\n");
 			continue;
 		}
+		if (rv != RFC6287_SUCCESS) {
+			printf("Aborting second response (out of memory or suite wrong)\n");
+			break;
+		}
+		C = next_counter;
 		printf(" 2nd verify match.\n");
 		printf("Found Counter. The next counter is: 0x%.16" PRIx64 ".\n", C);
 		printf("Storing counter in db to allow future window checks\n");
