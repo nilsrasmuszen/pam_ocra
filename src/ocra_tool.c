@@ -665,19 +665,84 @@ cmd_sync_counter(int argc, char **argv)
 	memset(&K, 0, sizeof(K));
 	memset(&V, 0, sizeof(V));
 
-	if (strlen(challenge) != 8) {
-		err(EX_SOFTWARE, "Challenge with 8 bytes required");
+
+	if (0 != (config_db_open(&db, DB_OPEN_FLAGS_RO, fname,
+	    user_id, nodata, fake_suite))) {
+		err(EX_OSERR, "dbopen() failed");
 	}
-	if (strlen(response1) != 6) {
-		err(EX_SOFTWARE, "Response with 6 bytes required");
+	KEY(K, "suite");
+	if (0 != (ret = config_db_get(db, &K, &V))) {
+		errx(EX_OSERR, "db->get() failed: %s",
+		    (1 == ret) ? "suite not in db" : strerror(errno));
 	}
-	if (strlen(response2) != 6) {
-		err(EX_SOFTWARE, "Validation with 6 bytes required");
+
+	if (RFC6287_SUCCESS != (ret = rfc6287_parse_suite(&ocra, V.data))) {
+		errx(EX_SOFTWARE, "rfc6287_parse_suite() failed: %s",
+		    rfc6287_err(ret));
+	}
+
+	KEY(K, "key");
+	if (0 != (ret = config_db_get(db, &K, &V))) {
+		errx(EX_OSERR, "db->get() failed: %s",
+		    (1 == ret) ? "key not in db" : strerror(errno));
+	}
+	if (mdlen(ocra.hotp_alg) != V.size) {
+		errx(EX_SOFTWARE, "key size does not match suite!");
+	}
+
+	if (0 == (ocra.flags & FL_C)){
+		errx(EX_CONFIG, "suite does not require counter, can not sync");
+	}
+
+	if (ocra.Q_l != (int)strlen(challenge)){
+		errx(EX_CONFIG, "challenge length does not match suite (%d)",
+		    ocra.Q_l);
+	}
+
+	if ((ocra.hotp_trunc != (int)strlen(response1)) ||
+	    (ocra.hotp_trunc != (int)strlen(response2))) {
+		errx(EX_CONFIG, "response length does not match suite (%d)",
+		    ocra.hotp_trunc);
+	}
+
+	if (ocra.flags & FL_P) {
+		KEY(K, "P");
+		if (0 != (ret = config_db_get(db, &K, &V))) {
+			errx(EX_OSERR, "db->get() failed: %s",
+			    (1 == ret) ? "key not in db" : strerror(errno));
+		}
+
+		if (mdlen(ocra.P_alg) != V.size) {
+			errx(EX_SOFTWARE, "pin hash size does not match suite!");
+		}
+
+		KEY(K, "kill_pin");
+		if (0 == (ret = config_db_get(db, &K, &V))) {
+			if (V.size != 0) {
+				if (mdlen(ocra.P_alg) != V.size) {
+					errx(EX_SOFTWARE,
+					    "kill pin hash size does not match suite!");
+				}
+			}
+		}
+	}
+	if (ocra.flags & FL_T) {
+		int TO;
+
+		KEY(K, "timestamp_offset");
+		if (0 != (ret = config_db_get(db, &K, &V))) {
+			errx(EX_OSERR, "db->get() failed: %s",
+			    (1 == ret) ? "key not in db" : strerror(errno));
+		}
+		memcpy(&TO, V.data, sizeof(TO));
 	}
 
 	printf("Brute forcing verify function...\n");
 	find_counter(fname, challenge, response1, response2);
 	printf("done\n");
+	if (0 != (config_db_close(db))) {
+		errx(EX_OSERR, "db->close() failed: %s", strerror(errno));
+	}
 }
 
 static void
